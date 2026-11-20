@@ -1,0 +1,6 @@
+node_modules
+dist
+dist-ssr
+coverage
+pnpm-lock.yaml
+CAMPUSHUB_PROJECT_PLAN.md

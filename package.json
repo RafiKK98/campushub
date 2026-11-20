@@ -1,0 +1,19 @@
+{
+  "name": "campushub",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CampusHub full-stack student portal",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=26.0.0"
+  },
+  "scripts": {
+    "dev:frontend": "pnpm --dir frontend dev",
+    "dev:backend": "pnpm --dir backend dev",
+    "build": "pnpm --dir backend build && pnpm --dir frontend build",
+    "lint": "pnpm --dir backend lint && pnpm --dir frontend lint",
+    "typecheck": "pnpm --dir backend typecheck && pnpm --dir frontend typecheck",
+    "format": "pnpm --dir backend format && pnpm --dir frontend format",
+    "format:check": "pnpm --dir backend format:check && pnpm --dir frontend format:check"
+  }
+}
