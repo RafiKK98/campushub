@@ -48,6 +48,7 @@ Thumbs.db
 # Deployment and generated tooling
 .vercel/
 .turbo/
+backend/src/generated/
 
 # Docker overrides that may contain local secrets
 docker-compose.override.yml

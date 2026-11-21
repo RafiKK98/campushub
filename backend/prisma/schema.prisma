@@ -1,0 +1,149 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  INSTRUCTOR
+  STUDENT
+}
+
+enum CourseStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  ARCHIVED
+}
+
+enum Weekday {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  DROPPED
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  taughtCourses Course[]       @relation("CourseInstructor")
+  enrollments   Enrollment[]
+  submissions   Submission[]
+  announcements Announcement[]
+
+  @@index([role, isActive])
+}
+
+model Course {
+  id           String       @id @default(uuid()) @db.Uuid
+  code         String       @unique
+  title        String
+  description  String       @db.Text
+  credits      Int
+  capacity     Int
+  term         String
+  scheduleDay  Weekday
+  startTime    String       @db.VarChar(5)
+  endTime      String       @db.VarChar(5)
+  room         String
+  status       CourseStatus @default(DRAFT)
+  instructorId String       @db.Uuid
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  instructor    User           @relation("CourseInstructor", fields: [instructorId], references: [id], onDelete: Restrict)
+  enrollments   Enrollment[]
+  assignments   Assignment[]
+  announcements Announcement[]
+
+  @@index([status, term])
+  @@index([instructorId])
+}
+
+model Enrollment {
+  id         String           @id @default(uuid()) @db.Uuid
+  studentId  String           @db.Uuid
+  courseId   String           @db.Uuid
+  status     EnrollmentStatus @default(ENROLLED)
+  enrolledAt DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course  Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId])
+  @@index([courseId, status])
+  @@index([studentId, status])
+}
+
+model Assignment {
+  id          String   @id @default(uuid()) @db.Uuid
+  courseId    String   @db.Uuid
+  title       String
+  description String   @db.Text
+  dueAt       DateTime
+  maxScore    Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+
+  @@index([courseId, dueAt])
+}
+
+model Submission {
+  id           String    @id @default(uuid()) @db.Uuid
+  assignmentId String    @db.Uuid
+  studentId    String    @db.Uuid
+  content      String    @db.Text
+  submittedAt  DateTime  @default(now())
+  score        Int?
+  feedback     String?   @db.Text
+  gradedAt     DateTime?
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, studentId])
+  @@index([assignmentId])
+  @@index([studentId])
+}
+
+model Announcement {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String
+  body        String   @db.Text
+  courseId    String?  @db.Uuid
+  authorId    String   @db.Uuid
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  author User    @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([courseId, publishedAt])
+  @@index([authorId])
+}
