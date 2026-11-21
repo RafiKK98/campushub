@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { createHash } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
+import bcrypt from 'bcryptjs';
 import {
   CourseStatus,
   EnrollmentStatus,
@@ -8,8 +9,6 @@ import {
   Role,
   Weekday,
 } from '../src/generated/prisma/client.ts';
-
-const DEMO_PASSWORD_HASH = '$2b$12$21xo24dwHM4wHR5q8bWP4.kkHJqNrvm9pUW8hWHhqSn1Gs8mUl3SC';
 
 const idFor = (key: string): string => {
   const hex = createHash('sha256').update(key).digest('hex');
@@ -439,6 +438,21 @@ const announcements = [
 ] as const;
 
 const main = async (): Promise<void> => {
+  // Determine demo password for seeded users
+  const isProduction = process.env.NODE_ENV === 'production';
+  const demoPassword =
+    process.env.DEMO_PASSWORD ?? (isProduction ? undefined : 'CampusHubDemo!2026');
+
+  if (isProduction && !process.env.DEMO_PASSWORD) {
+    throw new Error('DEMO_PASSWORD must be set explicitly in production');
+  }
+
+  if (!demoPassword) {
+    throw new Error('Demo password is not configured');
+  }
+
+  const demoPasswordHash = await bcrypt.hash(demoPassword, 12);
+
   for (const user of users) {
     await prisma.user.upsert({
       where: { email: user.email },
@@ -446,7 +460,7 @@ const main = async (): Promise<void> => {
         name: user.name,
         role: user.role,
         isActive: true,
-        passwordHash: DEMO_PASSWORD_HASH,
+        passwordHash: demoPasswordHash,
       },
       create: {
         id: idFor(`user:${user.key}`),
@@ -454,7 +468,7 @@ const main = async (): Promise<void> => {
         email: user.email,
         role: user.role,
         isActive: true,
-        passwordHash: DEMO_PASSWORD_HASH,
+        passwordHash: demoPasswordHash,
       },
     });
   }

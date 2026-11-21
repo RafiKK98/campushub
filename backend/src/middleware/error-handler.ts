@@ -52,6 +52,7 @@ export const errorHandler: ErrorRequestHandler = (error, request, response, next
     path: request.path,
     errorName: error instanceof Error ? error.name : 'UnknownError',
     errorMessage: error instanceof Error ? error.message : 'Unknown error',
+    errorStack: error instanceof Error ? error.stack : undefined,
   });
 
   response.status(500).json({

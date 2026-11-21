@@ -1,14 +1,25 @@
 import express, { type Request, type Response } from 'express';
+import helmet from 'helmet';
+import { env } from './config/env.js';
 import { prisma } from './lib/prisma.js';
 import { logger } from './lib/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { requestLogger } from './middleware/request-logger.js';
+import { originGuard } from './middleware/originGuard.js';
+import { authRouter } from './modules/auth/auth.routes.js';
 
 export const app = express();
 
 app.disable('x-powered-by');
+
+if (env.TRUST_PROXY) {
+  app.set('trust proxy', env.TRUST_PROXY);
+}
+
+app.use(helmet());
 app.use(requestLogger);
 app.use(express.json({ limit: '16kb' }));
+app.use(originGuard);
 
 app.get('/api/health', (_request: Request, response: Response) => {
   response.status(200).json({
@@ -43,6 +54,8 @@ app.get('/api/ready', async (_request: Request, response: Response) => {
     });
   }
 });
+
+app.use('/api/v1/auth', authRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
