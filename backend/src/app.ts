@@ -7,6 +7,12 @@ import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { requestLogger } from './middleware/request-logger.js';
 import { originGuard } from './middleware/originGuard.js';
 import { authRouter } from './modules/auth/auth.routes.js';
+import {
+  adminCourseRouter,
+  courseRouter,
+  instructorCourseRouter,
+  studentCourseRouter,
+} from './modules/courses/course.routes.js';
 
 export const app = express();
 
@@ -56,6 +62,10 @@ app.get('/api/ready', async (_request: Request, response: Response) => {
 });
 
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/courses', courseRouter);
+app.use('/api/v1/admin/courses', adminCourseRouter);
+app.use('/api/v1/instructor/courses', instructorCourseRouter);
+app.use('/api/v1/student/courses', studentCourseRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

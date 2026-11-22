@@ -6,7 +6,7 @@ CampusHub is a role-based university student portal built as a full-stack portfo
 
 ## Current status
 
-Milestone 1 is complete: the backend has the Prisma 7 schema, the initial Neon migration, an idempotent seed script, centralized environment validation, logging, error handling, request validation helpers, and database readiness checks. Authentication and the role-specific portal screens have not been started yet.
+Milestones 1-3 are complete: the backend has the Prisma 7 schema, the initial Neon migration, an idempotent seed script, centralized environment validation, logging, error handling, request validation helpers, database readiness checks, authentication and role-based authorization, and course/enrollment APIs. The React portal screens and later milestones have not been started yet.
 
 See [CAMPUSHUB_PROJECT_PLAN.md](./CAMPUSHUB_PROJECT_PLAN.md) for the full specification and milestone order.
 
@@ -119,7 +119,7 @@ Run database commands from the repository root:
 | `pnpm --dir backend db:seed` | Seed the fictional demo dataset |
 | `pnpm --dir backend db:studio` | Open Prisma Studio |
 
-The seed is idempotent and creates 1 admin, 2 instructors, 10 students, 5 courses, enrollments, assignments, submissions, and announcements. Authentication and demo sign-in will be implemented in Milestone 2.
+The seed is idempotent and creates 1 admin, 2 instructors, 10 students, 5 courses, enrollments, assignments, submissions, and announcements. Authentication and demo sign-in are implemented in Milestone 2.
 
 ## Health endpoints
 
@@ -147,4 +147,4 @@ The API logs structured JSON for startup, shutdown, completed requests, readines
 
 ## Known limitations
 
-This is a portfolio project running on free-tier infrastructure later in the project. It is not intended for real institutional use. Authentication and authorization are not implemented yet, and the current milestone is a backend/database foundation rather than a usable portal.
+This is a portfolio project running on free-tier infrastructure later in the project. It is not intended for real institutional use. The React portal is not implemented yet; the current milestones provide the database, authentication/RBAC, and course/enrollment APIs rather than a usable portal.

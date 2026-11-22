@@ -52,3 +52,43 @@ Status: Complete
 - Prisma `7.10.1` emits a preinstall warning about its listed Node.js support range on Node `26.13.1`, but schema validation, generation, migrations, seeding, and runtime connectivity all passed.
 - Request validation and logging helpers are in place but are not yet used by feature routes.
 - Local Docker Compose PostgreSQL and automated backend tests arrive in later milestones.
+
+## Milestone 2 - Authentication and role-based access control
+
+Status: Complete
+
+- [x] Added validated authentication environment variables for JWT, cookies, proxy trust, and the frontend origin.
+- [x] Added `jose` HS256 access tokens with issuer/audience validation and the user ID as `sub`.
+- [x] Added bcryptjs password verification with a dummy hash for unknown/inactive users and generic login errors.
+- [x] Added HttpOnly, SameSite, production-Secure session cookies with `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, and `GET /api/v1/auth/me`.
+- [x] Added database-authoritative `authenticate` and `requireRole` middleware; token role claims are not trusted.
+- [x] Added Helmet, an Origin guard for unsafe browser requests, login rate limiting, structured errors, and request validation.
+- [x] Documented that `TRUST_PROXY` must match the real proxy hop count; for Vercel -> Render it is often `2`, and `true` is unsafe.
+- [x] Added integration coverage for authentication, logout, RBAC, origin checks, rate limiting (including spoofed `X-Forwarded-For` prefixes), security headers, and sensitive-field exposure.
+
+### Verification
+
+- `pnpm format:check`, `pnpm typecheck`, `pnpm lint`, and `pnpm build`: passed.
+- `pnpm test`: 19 passed.
+- Security audit approved; commit `aeca20e24a9e55fff44e484ab6f7ce298dfed1e2`.
+- The committed suite initially had a rate-limiter helper regression; the working tree now uses `ipKeyGenerator` and the rate-limit test passes.
+
+## Milestone 3 - Courses and enrollments
+
+Status: Complete
+
+- [x] Added shared, admin, instructor, and student course routers under `/api/v1`.
+- [x] Added course list/detail, admin create/update/status/delete, instructor own-course list, and admin/instructor rosters.
+- [x] Added student enrollment, drop, and own-course listing with server-derived student ownership.
+- [x] Enforced role-aware course visibility and ownership checks.
+- [x] Added pagination, search, term, status, and roster filters.
+- [x] Added transactional row locking for course mutations and enrollment capacity checks.
+- [x] Added duplicate, capacity, open-status, invalid-instructor, and dependency protections.
+- [x] Added course/enrollment integration tests and excluded compiled `dist` tests from Vitest.
+- [x] No schema change or migration was required.
+
+### Verification
+
+- `pnpm format:check`, `pnpm typecheck`, `pnpm lint`, and `pnpm build`: passed.
+- `pnpm test`: 49 passed, including 30 new course/enrollment tests.
+- Test coverage includes authorization, visibility, CRUD, deletion dependencies, enrollment/drop/re-enroll, capacity, concurrent enrollment, inactive/deleted sessions, rosters, and sensitive-field exposure.

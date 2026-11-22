@@ -10,9 +10,6 @@ import { randomUUID } from 'node:crypto';
 import { authenticate } from '../../middleware/authenticate.js';
 import { requireRole } from '../../middleware/authorize.js';
 import { createLoginRateLimiter } from '../../middleware/rateLimiter.js';
-import { validateBody } from '../../middleware/validate.js';
-import { loginSchema } from './auth.schemas.js';
-import { authenticateCredentials } from './auth.service.js';
 
 import { errorHandler, notFoundHandler } from '../../middleware/error-handler.js';
 
@@ -187,7 +184,8 @@ describe('Authentication', () => {
     expect(res.status).toBe(204);
     const setCookie = res.headers['set-cookie'];
     expect(setCookie).toBeTruthy();
-    const cleared = setCookie!.find((c) => c.startsWith(`${env.AUTH_COOKIE_NAME}=`));
+    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+    const cleared = cookies.find((c) => c.startsWith(`${env.AUTH_COOKIE_NAME}=`));
     expect(cleared).toContain('Expires=Thu, 01 Jan 1970');
   });
 });
@@ -262,71 +260,44 @@ describe('Origin guard', () => {
 });
 
 describe('Rate limiting', () => {
-  it('should return 429 after exceeding login attempts', async () => {
-    // Create a test app with a strict limiter (limit 2)
+  it('should return 429 after exceeding login attempts and ignore spoofed forwarded prefixes', async () => {
+    // Simulate: browser -> Vercel -> Render -> Express.
+    // The rightmost forwarded address is the trusted proxy hop, so the
+    // address in the middle is the client. The leftmost value is attacker-controlled.
     const testApp = express();
     testApp.use(express.json());
-    testApp.set('trust proxy', 1);
-    // const limiter = createLoginRateLimiter(); // Removed unused
-    // Override limit for this test by creating a new limiter with limit 2
-    // We'll create a new limiter instance with custom options
-    const { rateLimit } = await import('express-rate-limit');
-    const strictLimiter = rateLimit({
-      windowMs: 60000,
-      limit: 2,
-      standardHeaders: 'draft-8',
-      legacyHeaders: false,
-      skipSuccessfulRequests: true,
-      keyGenerator: ipKeyGenerator,
-      handler: (_req, res, _next) => {
-        res.status(429).json({
+    testApp.set('trust proxy', 2);
+    testApp.post(
+      '/login-test',
+      createLoginRateLimiter({ limit: 2, windowMs: 60000 }),
+      (_req, res) => {
+        res.status(401).json({
           error: {
-            code: 'TOO_MANY_REQUESTS',
-            message: 'Too many login attempts. Try again later.',
+            code: 'INVALID_CREDENTIALS',
+            message: 'Invalid email or password.',
           },
         });
       },
-    });
-
-    testApp.post(
-      '/login-test',
-      strictLimiter,
-      validateBody(loginSchema),
-      async (req, res, next) => {
-        try {
-          await authenticateCredentials(req.body, res);
-          res.json({ data: { ok: true } });
-        } catch (e) {
-          next(e);
-        }
-      },
     );
+    testApp.use(errorHandler);
 
-    // Use a unique IP by setting X-Forwarded-For
-    const ip = `10.0.0.${randomUUID().slice(0, 3)}`;
+    const realClient = '203.0.113.10';
+    const vercelEgress = '198.51.100.20';
 
-    // First failed attempt
+    // First and second failed attempts from the real client are allowed.
     await request(testApp)
       .post('/login-test')
-      .set('X-Forwarded-For', ip)
-      .set('Origin', env.FRONTEND_ORIGIN)
-      .send({ email: TEST_USERS.admin.email, password: 'wrong' })
+      .set('X-Forwarded-For', `10.0.0.1, ${realClient}, ${vercelEgress}`)
       .expect(401);
-
-    // Second failed attempt
     await request(testApp)
       .post('/login-test')
-      .set('X-Forwarded-For', ip)
-      .set('Origin', env.FRONTEND_ORIGIN)
-      .send({ email: TEST_USERS.admin.email, password: 'wrong' })
+      .set('X-Forwarded-For', `10.0.0.2, ${realClient}, ${vercelEgress}`)
       .expect(401);
 
-    // Third attempt should be rate limited
+    // Changing the attacker-controlled leftmost value must not reset the limit.
     const res = await request(testApp)
       .post('/login-test')
-      .set('X-Forwarded-For', ip)
-      .set('Origin', env.FRONTEND_ORIGIN)
-      .send({ email: TEST_USERS.admin.email, password: 'wrong' });
+      .set('X-Forwarded-For', `10.0.0.3, ${realClient}, ${vercelEgress}`);
     expect(res.status).toBe(429);
     expect(res.body.error.code).toBe('TOO_MANY_REQUESTS');
   });
