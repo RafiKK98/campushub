@@ -7,11 +7,17 @@ import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { requestLogger } from './middleware/request-logger.js';
 import { originGuard } from './middleware/originGuard.js';
 import { authRouter } from './modules/auth/auth.routes.js';
+import { announcementRouter } from './modules/announcements/announcement.routes.js';
 import {
   adminAssignmentRouter,
   assignmentRouter,
   instructorAssignmentRouter,
 } from './modules/assignments/assignment.routes.js';
+import {
+  adminDashboardRouter,
+  instructorDashboardRouter,
+  studentDashboardRouter,
+} from './modules/dashboards/dashboard.routes.js';
 import {
   adminCourseRouter,
   courseRouter,
@@ -84,6 +90,12 @@ app.use('/api/v1/instructor/assignments', instructorAssignmentRouter);
 app.use('/api/v1/student/submissions', studentSubmissionRouter);
 app.use('/api/v1/instructor/submissions', instructorSubmissionRouter);
 app.use('/api/v1/admin/submissions', adminSubmissionRouter);
+
+app.use('/api/v1/announcements', announcementRouter);
+
+app.use('/api/v1/admin/overview', adminDashboardRouter);
+app.use('/api/v1/instructor/overview', instructorDashboardRouter);
+app.use('/api/v1/student/overview', studentDashboardRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

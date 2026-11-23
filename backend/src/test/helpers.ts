@@ -100,6 +100,26 @@ export const createTestAssignment = async (input: TestAssignmentInput) => {
   });
 };
 
+export interface TestAnnouncementInput {
+  authorId: string;
+  courseId?: string | null;
+  title?: string;
+  body?: string;
+  publishedAt?: Date;
+}
+
+export const createTestAnnouncement = async (input: TestAnnouncementInput) => {
+  return prisma.announcement.create({
+    data: {
+      authorId: input.authorId,
+      courseId: input.courseId ?? null,
+      title: input.title ?? 'Test Announcement',
+      body: input.body ?? 'Test announcement body',
+      publishedAt: input.publishedAt ?? new Date(),
+    },
+  });
+};
+
 export interface TestSubmissionInput {
   assignmentId: string;
   studentId: string;

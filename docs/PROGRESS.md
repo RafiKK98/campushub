@@ -110,3 +110,23 @@ Status: Complete
 
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`: passed.
 - `pnpm test`: 3 test files, 99 tests passed (19 M2 auth, 30 M3 course/enrollment, 50 M4 assignment/submission/grading).
+
+## Milestone 6 - Announcements and dashboards
+
+Status: Complete
+
+- [x] Added announcement listing, creation, update, and deletion under `/api/v1/announcements`.
+- [x] Enforced strict creation rules: administrators publish global announcements only; instructors publish course-specific announcements only for courses they own; students cannot create announcements.
+- [x] Enforced author-or-admin update and delete permissions, with `courseId` immutable and only `title`/`body` editable.
+- [x] Added role-based visibility: admins see all; instructors see global plus own-course announcements; students see global plus enrolled-course announcements. Unrelated-course filters return an empty list without leaking data.
+- [x] Added pagination, title/body search, and optional `courseId` filtering.
+- [x] Added admin dashboard summary at `GET /api/v1/admin/overview` (students, instructors, open courses, active enrollments).
+- [x] Added instructor dashboard summary at `GET /api/v1/instructor/overview` (own courses, distinct enrolled students, assignment counts, pending grading, graded submissions).
+- [x] Added student dashboard summary at `GET /api/v1/student/overview` (enrolled courses, next 5 upcoming assignments with submission status, 5 recent visible announcements, grade summary).
+- [x] Added 32 integration tests across announcement and dashboard modules.
+- [x] No schema change or migration was required.
+
+### Verification
+
+- `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`: passed.
+- `pnpm test`: 5 test files, 131 tests passed (99 prior M1-M4/M5 tests plus 24 announcement and 8 dashboard tests).
