@@ -8,11 +8,21 @@ import { requestLogger } from './middleware/request-logger.js';
 import { originGuard } from './middleware/originGuard.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import {
+  adminAssignmentRouter,
+  assignmentRouter,
+  instructorAssignmentRouter,
+} from './modules/assignments/assignment.routes.js';
+import {
   adminCourseRouter,
   courseRouter,
   instructorCourseRouter,
   studentCourseRouter,
 } from './modules/courses/course.routes.js';
+import {
+  adminSubmissionRouter,
+  instructorSubmissionRouter,
+  studentSubmissionRouter,
+} from './modules/submissions/submission.routes.js';
 
 export const app = express();
 
@@ -66,6 +76,14 @@ app.use('/api/v1/courses', courseRouter);
 app.use('/api/v1/admin/courses', adminCourseRouter);
 app.use('/api/v1/instructor/courses', instructorCourseRouter);
 app.use('/api/v1/student/courses', studentCourseRouter);
+
+app.use('/api/v1/assignments', assignmentRouter);
+app.use('/api/v1/admin/assignments', adminAssignmentRouter);
+app.use('/api/v1/instructor/assignments', instructorAssignmentRouter);
+
+app.use('/api/v1/student/submissions', studentSubmissionRouter);
+app.use('/api/v1/instructor/submissions', instructorSubmissionRouter);
+app.use('/api/v1/admin/submissions', adminSubmissionRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

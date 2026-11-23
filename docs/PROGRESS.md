@@ -92,3 +92,21 @@ Status: Complete
 - `pnpm format:check`, `pnpm typecheck`, `pnpm lint`, and `pnpm build`: passed.
 - `pnpm test`: 49 passed, including 30 new course/enrollment tests.
 - Test coverage includes authorization, visibility, CRUD, deletion dependencies, enrollment/drop/re-enroll, capacity, concurrent enrollment, inactive/deleted sessions, rosters, and sensitive-field exposure.
+
+## Milestone 4 - Assignments, submissions, and grading
+
+Status: Complete
+
+- [x] Added assignment CRUD and role-aware listing/detail endpoints under `/api/v1/assignments`, `/api/v1/instructor/assignments`, and `/api/v1/admin/assignments`.
+- [x] Added student submission/resubmission, own-submission view, and submission listing endpoints.
+- [x] Added instructor and admin submission listing and grading/feedback endpoints.
+- [x] Enforced course ownership for instructors, enrollment checks for students, and admin override access.
+- [x] Enforced deadline boundaries (resubmissions allowed before `dueAt`, late initial submissions allowed once, no updates after grading).
+- [x] Protected assignments with graded submissions from non-admin `maxScore` or `dueAt` changes.
+- [x] Added 50 integration tests in `backend/src/modules/assignments/assignment.test.ts` covering all permissions, deadlines, grading constraints, and concurrency.
+- [x] No schema change or migration was required.
+
+### Verification
+
+- `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`: passed.
+- `pnpm test`: 3 test files, 99 tests passed (19 M2 auth, 30 M3 course/enrollment, 50 M4 assignment/submission/grading).

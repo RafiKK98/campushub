@@ -79,3 +79,47 @@ export const createTestCourse = async (input: TestCourseInput) => {
     },
   });
 };
+
+export interface TestAssignmentInput {
+  courseId: string;
+  title?: string;
+  description?: string;
+  dueAt?: Date;
+  maxScore?: number;
+}
+
+export const createTestAssignment = async (input: TestAssignmentInput) => {
+  return prisma.assignment.create({
+    data: {
+      courseId: input.courseId,
+      title: input.title ?? 'Test Assignment',
+      description: input.description ?? 'Description for Test Assignment',
+      dueAt: input.dueAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default 7 days in future
+      maxScore: input.maxScore ?? 100,
+    },
+  });
+};
+
+export interface TestSubmissionInput {
+  assignmentId: string;
+  studentId: string;
+  content?: string;
+  submittedAt?: Date;
+  score?: number;
+  feedback?: string;
+  gradedAt?: Date;
+}
+
+export const createTestSubmission = async (input: TestSubmissionInput) => {
+  return prisma.submission.create({
+    data: {
+      assignmentId: input.assignmentId,
+      studentId: input.studentId,
+      content: input.content ?? 'Submission content',
+      submittedAt: input.submittedAt ?? new Date(),
+      score: input.score,
+      feedback: input.feedback,
+      gradedAt: input.gradedAt,
+    },
+  });
+};
