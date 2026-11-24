@@ -15,7 +15,7 @@ import { useForm } from 'react-hook-form';
 import { Link as RouterLink, Navigate, useLocation } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '../../lib/api-client';
-import { roleHome } from '../../lib/roles';
+import { isPathAllowedForRole, roleHome } from '../../lib/roles';
 import { useAuth } from './auth-context';
 
 const loginSchema = z.object({
@@ -46,7 +46,8 @@ export const LoginPage = () => {
   const from = (location.state as { from?: string } | null)?.from;
 
   if (user) {
-    return <Navigate to={from ?? roleHome(user.role)} replace />;
+    const target = from && isPathAllowedForRole(from, user.role) ? from : roleHome(user.role);
+    return <Navigate to={target} replace />;
   }
 
   const onSubmit = handleSubmit(async (values) => {

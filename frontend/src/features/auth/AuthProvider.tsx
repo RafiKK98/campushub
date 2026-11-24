@@ -35,6 +35,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       },
       logout: async () => {
         await logoutMutation.mutateAsync();
+        await queryClient.cancelQueries();
         queryClient.clear();
         queryClient.setQueryData<AuthUser | null>(queryKeys.me, null);
       },

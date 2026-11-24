@@ -1,12 +1,12 @@
 # CampusHub
 
-CampusHub is a role-based university student portal built as a full-stack portfolio project. It demonstrates a React + TypeScript frontend, an Express + TypeScript API, PostgreSQL with Prisma, backend-enforced authorization, automated tests, Docker Compose, and CI/CD deployment.
+CampusHub is a role-based university student portal built as a full-stack portfolio project. It demonstrates a React + TypeScript frontend, an Express + TypeScript API, PostgreSQL with Prisma, backend-enforced authorization, automated tests, a Docker Compose stack, and (in later milestones) CI/CD deployment.
 
 **Repository:** https://github.com/RafiKK98/campushub
 
 ## Current status
 
-Milestones 1-7 are complete: the full-stack application includes the Prisma 7 schema, the initial Neon migration, an idempotent seed script, centralized environment validation, logging, error handling, database readiness checks, authentication and role-based authorization, admin user-management APIs, course/enrollment APIs, assignment/submission/grading APIs, announcement APIs, role-specific dashboard summaries, and a complete React single-page portal covering Admin, Instructor, and Student journeys with automated frontend and backend test suites.
+Milestones 1-8 are complete: the full-stack application includes the Prisma 7 schema, the initial Neon migration, an idempotent seed script, centralized environment validation, logging, error handling, database readiness checks, authentication and role-based authorization, admin user-management APIs, course/enrollment APIs, assignment/submission/grading APIs, announcement APIs, role-specific dashboard summaries, a complete React single-page portal covering Admin, Instructor, and Student journeys, and a Docker Compose stack for PostgreSQL, migrations, the production API image, and the Nginx-served frontend.
 
 A post-M7 extension adds public student self-registration at `/register`. Registration always creates an active `STUDENT`, signs the new account in through the same HTTP-only session cookie used by login, and never accepts a role or active status from the client. Instructor and admin accounts are still created by administrators.
 
@@ -18,14 +18,18 @@ See [CAMPUSHUB_PROJECT_PLAN.md](./CAMPUSHUB_PROJECT_PLAN.md) for the full specif
 - Backend: Node.js 26 LTS, Express 5, TypeScript
 - Database: PostgreSQL with Prisma 7.10.1 and Neon
 - Tooling: pnpm, ESLint, Prettier
-- Delivery: Docker Compose, GitHub Actions, GHCR, Vercel, Render, Neon (later milestones)
+- Delivery: Docker Compose (local); GitHub Actions, GHCR, Vercel, Render, Neon (later milestones)
 
 ## Repository layout
 
 ```text
 campushub/
 ├── frontend/                 React + Vite application
+│   ├── Dockerfile            Vite build + Nginx runtime image
+│   └── nginx.conf            SPA fallback and /api reverse proxy
 ├── backend/                  Express API, Prisma schema, migrations, and seed
+│   └── Dockerfile            API build, migrate, and runtime stages
+├── docker-compose.yml        Local PostgreSQL + migrate + API + Nginx stack
 ├── docs/                     Project documentation and progress
 ├── .env.example              Docker Compose placeholders
 ├── .gitignore
@@ -41,6 +45,7 @@ The frontend and backend are independent pnpm packages. Each has its own `pnpm-l
 - Node.js 26 LTS
 - pnpm 10
 - Git
+- Docker Desktop with Docker Compose v2+ (for the containerized stack)
 
 The repository includes `.nvmrc` with the selected Node version. If you use `pnpm` to manage Node versions:
 
@@ -80,6 +85,61 @@ Open:
 
 Vite proxies `/api` requests to the backend, so the browser uses one origin during development.
 
+## Run with Docker Compose
+
+The local Compose stack runs four services on a private bridge network:
+
+| Service | Purpose | Host access |
+|---|---|---|
+| `db` | PostgreSQL 17 with the `campushub_postgres_data` volume | internal only |
+| `migrate` | One-shot `prisma migrate deploy` runner | none |
+| `api` | Production Express build (`node dist/server.js`) | internal only |
+| `web` | Nginx serving the Vite build and proxying `/api` | http://localhost:8080 |
+
+Prepare the Compose environment file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Set a URL-safe `POSTGRES_PASSWORD` and a `JWT_SECRET` of at least 32 characters. `DEMO_PASSWORD` controls the seeded demo accounts and defaults to `CampusHubDemo!2026`.
+
+Build and start:
+
+```bash
+docker compose up --build -d
+```
+
+Seed the demo data once (the `migrate` image already contains the seed script):
+
+```bash
+docker compose run --rm migrate pnpm db:seed
+```
+
+Open http://localhost:8080. Use `localhost`, not `127.0.0.1`, so the API origin check matches `FRONTEND_ORIGIN`.
+
+Demo accounts (password: `DEMO_PASSWORD`):
+
+- `admin@campushub.local` (admin)
+- `maya.chen@campushub.local` (instructor)
+- `daniel.okafor@campushub.local` (instructor)
+- `priya.patel@campushub.local` (student)
+
+Common commands:
+
+| Command | Purpose |
+|---|---|
+| `docker compose ps` | Show service and health status |
+| `docker compose logs -f api` | Follow API logs |
+| `docker compose logs -f web` | Follow Nginx logs |
+| `docker compose run --rm migrate pnpm exec prisma migrate status` | Check migration status |
+| `docker compose run --rm migrate pnpm exec prisma migrate deploy` | Apply pending migrations manually |
+| `docker compose down` | Stop the stack and keep the database volume |
+
+`docker compose down -v` deletes the `campushub_postgres_data` volume and all local data. Use it only when a destructive reset is intended; then run `docker compose up --build -d` and seed again.
+
+Compose uses the root `.env` and injects `db:5432` connection URLs into the `migrate` and `api` services. It does not read `backend/.env`. The API runs with `NODE_ENV=development` in this local stack so HTTP-only cookies work over plain HTTP; production TLS and Secure-cookie configuration belong to the deployment milestone.
+
 ## Scripts
 
 | Command | Purpose |
@@ -101,7 +161,7 @@ Copy-Item backend/.env.example backend/.env
 Copy-Item .env.example .env
 ```
 
-`.env` files are ignored by Git. `.env.example` files contain placeholders only and never real credentials.
+`.env` files are ignored by Git. `.env.example` files contain placeholders only and never real credentials. The root `.env` supplies Docker Compose values; `backend/.env` supplies the local (non-Docker) API and Prisma commands. Compose does not read `backend/.env`.
 
 ## Database
 
@@ -149,4 +209,4 @@ The API logs structured JSON for startup, shutdown, completed requests, readines
 
 ## Known limitations
 
-This is a portfolio project running on free-tier infrastructure later in the project. It is not intended for real institutional use. Public self-registration is limited to student accounts and includes rate limiting but no email verification, password reset, or OAuth. Administrators remain the only way to create instructor or additional administrator accounts.
+This is a portfolio project running on free-tier infrastructure later in the project. It is not intended for real institutional use. Public self-registration is limited to student accounts and includes rate limiting but no email verification, password reset, or OAuth. Administrators remain the only way to create instructor or additional administrator accounts. The Docker Compose stack is a local-development setup: it publishes only Nginx on port 8080, uses plain HTTP, and does not yet include production TLS, a managed database, or CI/CD deployment.

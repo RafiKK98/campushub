@@ -172,4 +172,37 @@ Status: Complete
 - Backend: `pnpm --dir backend format:check`, `pnpm --dir backend lint`, `pnpm --dir backend typecheck`, `pnpm --dir backend test` (164 passed across 7 test files), `pnpm --dir backend build`.
 - Frontend: `pnpm --dir frontend format:check`, `pnpm --dir frontend lint`, `pnpm --dir frontend typecheck`, `pnpm --dir frontend test` (25 passed across 6 test files), `pnpm --dir frontend build`.
 
+## Milestone 8 - Docker and Docker Compose
+
+Status: Complete
+
+- [x] Added a multi-stage `backend/Dockerfile` with `base`, `build`, `migrate`, and `runtime` targets. The build and migrate stages use `node:26-bookworm-slim` with OpenSSL so Prisma 7's schema engine works; the runtime stage installs production dependencies only and runs as the non-root `node` user.
+- [x] Added a multi-stage `frontend/Dockerfile` that builds the Vite bundle on `node:26-alpine` and serves it from `nginx:1.29-alpine`.
+- [x] Added `frontend/nginx.conf` with SPA fallback, immutable asset caching, and an `/api` reverse proxy to `api:4000` with forwarded headers.
+- [x] Added `docker-compose.yml` with `db` (PostgreSQL 17, healthcheck, named volume), one-shot `migrate`, `api` (healthcheck on `/api/health`), and `web` (published on `8080`). Only `web` is exposed; `db` and `api` stay on the private `campushub` network.
+- [x] Added `backend/.dockerignore` and `frontend/.dockerignore` so local dependencies, build output, environment files, and the generated Prisma client are excluded from build contexts.
+- [x] Extended `.env.example` with `JWT_SECRET` and `DEMO_PASSWORD`; Compose builds `DATABASE_URL`/`DIRECT_URL` for the `db` service and injects them into `migrate` and `api`.
+- [x] Reused the existing `prisma migrate deploy` and `prisma db seed` workflows; no application source, schema, or package changes were required.
+- [x] Documented the Compose workflow, service layout, demo accounts, persistence, and destructive-reset warning in the README.
+
+### Verification
+
+- `docker compose config`: valid; `campushub_postgres_data` resolves as the persistent volume and only `8080:80` is published.
+- `docker compose build`: built `campushub-api`, `campushub-migrate`, and `campushub-web`.
+- `docker compose up -d --wait`: `db`, `api`, and `web` became healthy; `migrate` exited `0` after applying `20261121043600_init`.
+- `docker compose run --rm migrate pnpm db:seed`: created 13 users, 5 courses, 19 enrollments, 7 assignments, 11 submissions, and 6 announcements.
+- HTTP smoke tests through `http://localhost:8080`: SPA `/` and `/login` returned `200`; the hashed JS asset returned `200`; `/api/health` and `/api/ready` returned `200`; admin, instructor, and student logins returned `200`; role-specific overviews returned `200`; cross-role admin/instructor/student endpoints returned `403 FORBIDDEN`.
+- Session cookie: `campushub_session` with `HttpOnly`, `SameSite=Lax`, `Path=/`, and `Max-Age=28800`; no `Secure` flag on local HTTP.
+- Registration: `POST /api/v1/auth/register` returned `201` with role `STUDENT`, the new account passed `/auth/me`, duplicate email returned `409 EMAIL_EXISTS`, and invalid input returned `400 VALIDATION_ERROR`.
+- Origin guard: a mismatched `Origin` returned `403 INVALID_ORIGIN`; requests without an `Origin` header are allowed by design (curl/server-to-server), with SameSite cookies providing CSRF protection.
+- Logout: `POST /api/v1/auth/logout` returned `204`, `/auth/me` returned `401 UNAUTHENTICATED`, and re-login returned `200`.
+- Persistence: `docker compose down` kept the `campushub_postgres_data` volume; `docker compose up -d --wait` applied no pending migrations and the registered user still logged in. The admin user list retained 14 users (13 seeded + 1 registered) and 5 courses.
+- Quality checks: backend `format:check`, `lint`, `typecheck`, `build`, and `test` (164 passed across 7 files); frontend `format:check`, `lint`, `typecheck`, `build`, and `test` (25 passed across 6 files).
+
+### Remaining limitations
+
+- Prisma `7.10.1` prints a Node.js support warning during install on Node 26 (`20.19+`, `22.12+`, `24.0+` are the advertised ranges). Generation, build, migration, seed, and runtime all work; revisit when Prisma officially supports Node 26 or upgrade Prisma.
+- The Compose stack uses `NODE_ENV=development` and plain HTTP so local cookies work without TLS. Production HTTPS, Secure cookies, managed PostgreSQL, and CI/CD remain for later milestones.
+- The `web` image serves a single large JS bundle (Vite's >500 kB warning); code splitting is not part of this milestone.
+
 
