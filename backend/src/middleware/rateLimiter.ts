@@ -20,3 +20,20 @@ export const createLoginRateLimiter = (options: LoginRateLimiterOptions = {}) =>
     },
   });
 };
+
+export const createRegistrationRateLimiter = (options: LoginRateLimiterOptions = {}) => {
+  return rateLimit({
+    windowMs: options.windowMs ?? env.REGISTRATION_RATE_LIMIT_WINDOW_MS,
+    limit: options.limit ?? env.REGISTRATION_RATE_LIMIT_MAX,
+    standardHeaders: false,
+    legacyHeaders: false,
+    keyGenerator: (request) => ipKeyGenerator(request.ip ?? ''),
+    handler: (_request, _response, _next) => {
+      throw new AppError(
+        429,
+        'TOO_MANY_REQUESTS',
+        'Too many registration attempts. Try again later.',
+      );
+    },
+  });
+};

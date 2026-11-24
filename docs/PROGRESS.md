@@ -130,3 +130,46 @@ Status: Complete
 
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`: passed.
 - `pnpm test`: 5 test files, 131 tests passed (99 prior M1-M4/M5 tests plus 24 announcement and 8 dashboard tests).
+
+## Milestone 7 - Frontend application and backend users module
+
+Status: Complete
+
+- [x] Implemented minimal admin user-management backend module at `/api/v1/admin/users` (`GET`, `POST`, `GET /:id`, `PATCH /:id`) with pagination, role/status filtering, search, normalized emails, securely hashed passwords, safe serialization (no password hash exposure), and admin self-protection (cannot deactivate self or change own role).
+- [x] Added 26 backend integration tests covering user creation, duplicate email rejection (409), role authorization (403), input validation, password updates, end-to-end login with new password, and self-protection.
+- [x] Configured the React + TypeScript + Vite frontend package with MUI v9, Emotion, React Router v7, TanStack Query v5, React Hook Form v7, Zod v4, Day.js, Vitest, JSDOM, and React Testing Library.
+- [x] Built the typed relative API client (`/api/v1/...`) with `credentials: 'same-origin'`, error envelope handling, `ApiError` mapping, and query string helpers.
+- [x] Added session bootstrap via `GET /api/v1/auth/me`, login, logout, and route guards (`ProtectedRoute`, `RoleRoute`, `RoleHomeRedirect`).
+- [x] Built the responsive `AppShell` with role-based navigation tabs, mobile navigation menu, user profile summary, and sign-out action.
+- [x] Implemented the **Administrator** journey: dashboard summary cards, user management (list, search, filter, create, edit, activate/deactivate), course management (list, filter, create, edit, status updates, delete, roster navigation), and global announcements.
+- [x] Implemented the **Instructor** journey: dashboard workload summary, assigned courses list, roster view, assignment management (create, edit, delete), submission grading and feedback dialog, and course announcements.
+- [x] Implemented the **Student** journey: dashboard summary (enrolled count, average grade, upcoming assignments, recent announcements), course catalogue (browse open courses, enroll), enrolled courses (view, drop), assignment submissions/resubmissions (with deadline and grading constraints), grades view, and announcements.
+- [x] Added 20 frontend unit and component tests covering API client, date/number formatting, route guards, login page validation/submission, and role-based shell navigation.
+- [x] No database schema changes were required.
+
+### Verification
+
+- Backend: `pnpm --dir backend format:check`, `pnpm --dir backend lint`, `pnpm --dir backend typecheck`, `pnpm --dir backend test` (157 passed across 6 test files), `pnpm --dir backend build`.
+- Frontend: `pnpm --dir frontend format:check`, `pnpm --dir frontend lint`, `pnpm --dir frontend typecheck`, `pnpm --dir frontend test` (20 passed across 5 test files), `pnpm --dir frontend build`.
+
+## Post-M7 extension - Public student registration
+
+Status: Complete
+
+- [x] Added public `POST /api/v1/auth/register` accepting only `name`, `email`, and `password`.
+- [x] Always assigns `STUDENT` on the server; client-supplied `role`, `isActive`, and other privileged fields are stripped by Zod and never trusted.
+- [x] Reused the shared bcrypt password helper (cost 12) and the existing session/JWT HTTP-only cookie flow, so registration signs the new student in immediately.
+- [x] Normalized email (trim + lowercase) and returned `409 EMAIL_EXISTS` for duplicate addresses without leaking password hashes.
+- [x] Added a dedicated per-IP registration rate limiter (`REGISTRATION_RATE_LIMIT_MAX`/`REGISTRATION_RATE_LIMIT_WINDOW_MS`).
+- [x] Added `/register` with a MUI page using React Hook Form + Zod, including full name, email, password, and confirm-password validation.
+- [x] Reused `AuthProvider`/TanStack Query: successful registration updates the `me` query and redirects to the student dashboard.
+- [x] Added login-to-register and register-to-login links while preserving existing login/logout/RBAC behavior.
+- [x] Added backend registration tests and frontend registration page tests.
+- [x] No database schema change or migration was required.
+
+### Verification
+
+- Backend: `pnpm --dir backend format:check`, `pnpm --dir backend lint`, `pnpm --dir backend typecheck`, `pnpm --dir backend test` (164 passed across 7 test files), `pnpm --dir backend build`.
+- Frontend: `pnpm --dir frontend format:check`, `pnpm --dir frontend lint`, `pnpm --dir frontend typecheck`, `pnpm --dir frontend test` (25 passed across 6 test files), `pnpm --dir frontend build`.
+
+

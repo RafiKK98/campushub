@@ -6,7 +6,9 @@ CampusHub is a role-based university student portal built as a full-stack portfo
 
 ## Current status
 
-Milestones 1-6 are complete: the backend has the Prisma 7 schema, the initial Neon migration, an idempotent seed script, centralized environment validation, logging, error handling, request validation helpers, database readiness checks, authentication and role-based authorization, course/enrollment APIs, assignment/submission/grading APIs, announcement APIs, and role-specific dashboard summaries. The React portal screens and later milestones have not been started yet.
+Milestones 1-7 are complete: the full-stack application includes the Prisma 7 schema, the initial Neon migration, an idempotent seed script, centralized environment validation, logging, error handling, database readiness checks, authentication and role-based authorization, admin user-management APIs, course/enrollment APIs, assignment/submission/grading APIs, announcement APIs, role-specific dashboard summaries, and a complete React single-page portal covering Admin, Instructor, and Student journeys with automated frontend and backend test suites.
+
+A post-M7 extension adds public student self-registration at `/register`. Registration always creates an active `STUDENT`, signs the new account in through the same HTTP-only session cookie used by login, and never accepts a role or active status from the client. Instructor and admin accounts are still created by administrators.
 
 See [CAMPUSHUB_PROJECT_PLAN.md](./CAMPUSHUB_PROJECT_PLAN.md) for the full specification and milestone order.
 
@@ -147,4 +149,4 @@ The API logs structured JSON for startup, shutdown, completed requests, readines
 
 ## Known limitations
 
-This is a portfolio project running on free-tier infrastructure later in the project. It is not intended for real institutional use. The React portal is not implemented yet; the current milestones provide the database, authentication/RBAC, course/enrollment, assignment/submission/grading, announcement, and dashboard APIs rather than a usable portal.
+This is a portfolio project running on free-tier infrastructure later in the project. It is not intended for real institutional use. Public self-registration is limited to student accounts and includes rate limiting but no email verification, password reset, or OAuth. Administrators remain the only way to create instructor or additional administrator accounts.

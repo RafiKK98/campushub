@@ -1,0 +1,17 @@
+export const queryKeys = {
+  me: ['me'] as const,
+  adminOverview: ['overview', 'admin'] as const,
+  instructorOverview: ['overview', 'instructor'] as const,
+  studentOverview: ['overview', 'student'] as const,
+  users: (params: object) => ['users', params] as const,
+  courses: (params: object) => ['courses', params] as const,
+  course: (id: string) => ['course', id] as const,
+  instructorCourses: (params: object) => ['instructor-courses', params] as const,
+  studentCourses: (params: object) => ['student-courses', params] as const,
+  roster: (courseId: string, params: object) => ['roster', courseId, params] as const,
+  assignments: (params: object) => ['assignments', params] as const,
+  assignment: (id: string) => ['assignment', id] as const,
+  submissions: (params: object) => ['submissions', params] as const,
+  mySubmission: (assignmentId: string) => ['my-submission', assignmentId] as const,
+  announcements: (params: object) => ['announcements', params] as const,
+};

@@ -33,6 +33,8 @@ const envSchema = z.object({
   TRUST_PROXY: z.coerce.number().int().min(0).max(10).optional(),
   LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   LOGIN_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000),
+  REGISTRATION_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  REGISTRATION_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(3600000),
 });
 
 const parsed = envSchema.safeParse(process.env);

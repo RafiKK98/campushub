@@ -410,6 +410,7 @@ Use a versioned REST API under `/api/v1`. Keep controllers thin: validate input,
 | Method | Endpoint | Access | Purpose |
 |---|---|---|---|
 | POST | `/api/v1/auth/login` | Public | Authenticate and set cookie |
+| POST | `/api/v1/auth/register` | Public | Register a student and set cookie |
 | POST | `/api/v1/auth/logout` | Authenticated | Clear cookie |
 | GET | `/api/v1/auth/me` | Authenticated | Return current user summary |
 
@@ -478,7 +479,7 @@ Use a versioned REST API under `/api/v1`. Keep controllers thin: validate input,
 
 Implement a practical, understandable baseline. Do not invent a custom authentication protocol.
 
-- Admin creates accounts; there is no public self-registration in this MVP.
+- Admin creates instructor and administrator accounts. Public student self-registration (`POST /api/v1/auth/register`) was added as an approved post-M7 extension; it always assigns `STUDENT`, activates the account, and ignores client-supplied role or active-status fields.
 - Hash passwords with bcrypt. Never store plaintext passwords.
 - Issue a signed JWT in an HTTP-only cookie. Do not put auth tokens in `localStorage`.
 - Cookie options: `httpOnly: true`, `sameSite: 'lax'`, `secure: true` in production, sensible `maxAge`, and `path: '/'`.

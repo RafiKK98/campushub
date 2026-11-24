@@ -29,6 +29,7 @@ import {
   instructorSubmissionRouter,
   studentSubmissionRouter,
 } from './modules/submissions/submission.routes.js';
+import { adminUserRouter } from './modules/users/user.routes.js';
 
 export const app = express();
 
@@ -92,6 +93,8 @@ app.use('/api/v1/instructor/submissions', instructorSubmissionRouter);
 app.use('/api/v1/admin/submissions', adminSubmissionRouter);
 
 app.use('/api/v1/announcements', announcementRouter);
+
+app.use('/api/v1/admin/users', adminUserRouter);
 
 app.use('/api/v1/admin/overview', adminDashboardRouter);
 app.use('/api/v1/instructor/overview', instructorDashboardRouter);

@@ -1,13 +1,31 @@
 import { Router } from 'express';
 import { validateBody } from '../../middleware/validate.js';
 import { authenticate } from '../../middleware/authenticate.js';
-import { createLoginRateLimiter } from '../../middleware/rateLimiter.js';
-import { loginSchema } from './auth.schemas.js';
-import { authenticateCredentials, logout } from './auth.service.js';
+import {
+  createLoginRateLimiter,
+  createRegistrationRateLimiter,
+} from '../../middleware/rateLimiter.js';
+import { loginSchema, registerSchema } from './auth.schemas.js';
+import { authenticateCredentials, logout, registerStudent } from './auth.service.js';
 
 const router = Router();
 
 const loginRateLimiter = createLoginRateLimiter();
+const registrationRateLimiter = createRegistrationRateLimiter();
+
+router.post(
+  '/register',
+  registrationRateLimiter,
+  validateBody(registerSchema),
+  async (request, response, next) => {
+    try {
+      const user = await registerStudent(request.body, response);
+      response.status(201).json({ data: { user } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.post(
   '/login',
