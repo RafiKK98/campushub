@@ -205,4 +205,37 @@ Status: Complete
 - The Compose stack uses `NODE_ENV=development` and plain HTTP so local cookies work without TLS. Production HTTPS, Secure cookies, managed PostgreSQL, and CI/CD remain for later milestones.
 - The `web` image serves a single large JS bundle (Vite's >500 kB warning); code splitting is not part of this milestone.
 
+## Milestone 9 - GitHub Actions CI and GHCR
+
+Status: Implemented locally; GitHub Actions execution and GHCR publication have not been verified because no push was performed.
+
+- [x] Added `.github/workflows/ci.yml` with `pull_request` and `push` triggers for `main`.
+- [x] Added a `quality` job with a PostgreSQL 17 service container, health checks, and CI-only database URLs.
+- [x] The quality job uses frozen installs for both packages, Prisma generate/validate/migrate deploy, format/lint/type-check, backend and frontend tests, and backend and frontend production builds.
+- [x] Added a `publish-api` job that depends on `quality`, runs only for pushes to `main`, requests `packages: write`, logs in to GHCR with `GITHUB_TOKEN`, and builds the existing backend `runtime` target for `linux/amd64`.
+- [x] Images are tagged as `ghcr.io/rafikk98/campushub-api:<full-commit-sha>` and `ghcr.io/rafikk98/campushub-api:latest`; the SHA tag is immutable and `latest` is a convenience tag.
+- [x] Pull-request runs never receive publishing permissions or deployment secrets. No frontend image or deployment target was added.
+- [x] Confirmed the backend suite is safe on the shared migrated CI database: `fileParallelism: false`, test cleanup uses scoped `deleteMany`, and there is no `DROP`, `TRUNCATE`, `migrate reset`, or `db push`.
+- [x] Updated the README with the CI badge, workflow behavior, GHCR image names, and milestone boundaries.
+- [x] No application source, Prisma schema, package, or lockfile changes were required.
+
+### Verification
+
+- `pnpm --dir frontend exec prettier --write ../.github/workflows/ci.yml`: workflow is Prettier-formatted.
+- `actionlint`: no findings.
+- Confirmed the referenced action major tags exist upstream: `actions/checkout@v7`, `pnpm/action-setup@v6`, `actions/setup-node@v7`, `docker/setup-buildx-action@v4`, `docker/login-action@v4`, and `docker/build-push-action@v7`.
+- Isolated CI-like database run: created a temporary database, applied the committed migration with `prisma migrate deploy`, ran the backend suite (164 passed across 7 files), confirmed `prisma migrate status` was up to date, and dropped the temporary database.
+- Runtime image: `docker build --file backend/Dockerfile --target runtime --tag campushub-api:m9-smoke backend` succeeded. A container started with `NODE_ENV=production`, `PORT`, `HOST`, `DATABASE_URL`, `JWT_SECRET`, and `FRONTEND_ORIGIN` returned `{"data":{"status":"ok","service":"campushub-api"}}` from `/api/health`. The runtime image contains no `/app/.env` and runs as UID `1000`.
+- Quality checks after implementation: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm --dir backend build`, `pnpm --dir frontend build`; frontend tests passed (38 across 7 files) and backend tests passed (164 across 7 files).
+- GHCR: not published or verified. The workflow exists only in the local working tree; the first publication requires a successful push to `main`. No commit or push was performed.
+- GitHub Actions UI execution, branch protection, GHCR package visibility, and pulling the package from another environment were not tested.
+
+### Remaining limitations
+
+- The workflow has not run on GitHub, so action availability, CI runtime, and GHCR authentication are not proven end-to-end. Verify the first pull request and first `main` push before relying on the badge or package.
+- Persisting the full commit SHA as an image tag requires the publishing job to build from the correct commit; the first main-branch run should be checked for the expected SHA tag and `latest`.
+- GHCR package visibility is not configured by this milestone. Pull-based deployment and package access belong to Milestone 10.
+- Required status checks and branch protection are not configured here; configuring them is a repository setting outside the workflow file.
+- The Prisma Node 26 warning and the single frontend bundle limitation from Milestone 8 remain unchanged.
+
 

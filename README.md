@@ -1,12 +1,16 @@
 # CampusHub
 
-CampusHub is a role-based university student portal built as a full-stack portfolio project. It demonstrates a React + TypeScript frontend, an Express + TypeScript API, PostgreSQL with Prisma, backend-enforced authorization, automated tests, a Docker Compose stack, and (in later milestones) CI/CD deployment.
+CampusHub is a role-based university student portal built as a full-stack portfolio project. It demonstrates a React + TypeScript frontend, an Express + TypeScript API, PostgreSQL with Prisma, backend-enforced authorization, automated tests, a Docker Compose stack, a GitHub Actions quality gate, GHCR backend image publishing, and (in a later milestone) hosted deployment.
 
 **Repository:** https://github.com/RafiKK98/campushub
+
+[![CI](https://github.com/RafiKK98/campushub/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/RafiKK98/campushub/actions/workflows/ci.yml)
 
 ## Current status
 
 Milestones 1-8 are complete: the full-stack application includes the Prisma 7 schema, the initial Neon migration, an idempotent seed script, centralized environment validation, logging, error handling, database readiness checks, authentication and role-based authorization, admin user-management APIs, course/enrollment APIs, assignment/submission/grading APIs, announcement APIs, role-specific dashboard summaries, a complete React single-page portal covering Admin, Instructor, and Student journeys, and a Docker Compose stack for PostgreSQL, migrations, the production API image, and the Nginx-served frontend.
+
+Milestone 9 adds a GitHub Actions quality gate for pull requests and pushes to `main`, plus a main-branch job that publishes the backend production image to GHCR only after the quality gate succeeds.
 
 A post-M7 extension adds public student self-registration at `/register`. Registration always creates an active `STUDENT`, signs the new account in through the same HTTP-only session cookie used by login, and never accepts a role or active status from the client. Instructor and admin accounts are still created by administrators.
 
@@ -18,7 +22,7 @@ See [CAMPUSHUB_PROJECT_PLAN.md](./CAMPUSHUB_PROJECT_PLAN.md) for the full specif
 - Backend: Node.js 26 LTS, Express 5, TypeScript
 - Database: PostgreSQL with Prisma 7.10.1 and Neon
 - Tooling: pnpm, ESLint, Prettier
-- Delivery: Docker Compose (local); GitHub Actions, GHCR, Vercel, Render, Neon (later milestones)
+- Delivery: Docker Compose (local); GitHub Actions CI and GHCR backend image publishing; Vercel, Render, and Neon deployment in a later milestone
 
 ## Repository layout
 
@@ -31,6 +35,7 @@ campushub/
 │   └── Dockerfile            API build, migrate, and runtime stages
 ├── docker-compose.yml        Local PostgreSQL + migrate + API + Nginx stack
 ├── docs/                     Project documentation and progress
+├── .github/workflows/ci.yml  CI quality gate and backend GHCR publishing
 ├── .env.example              Docker Compose placeholders
 ├── .gitignore
 ├── .prettierrc
@@ -140,6 +145,17 @@ Common commands:
 
 Compose uses the root `.env` and injects `db:5432` connection URLs into the `migrate` and `api` services. It does not read `backend/.env`. The API runs with `NODE_ENV=development` in this local stack so HTTP-only cookies work over plain HTTP; production TLS and Secure-cookie configuration belong to the deployment milestone.
 
+## CI and GHCR
+
+The workflow is defined in `.github/workflows/ci.yml`.
+
+- Pull requests targeting `main` run the quality gate only.
+- Pushes to `main` run the quality gate and, only after it passes, publish the backend image.
+- The quality gate installs both packages with frozen lockfiles, checks formatting and linting, type-checks, validates and applies committed Prisma migrations against a PostgreSQL 17 service container, runs backend and frontend tests, and builds both production bundles.
+- The publish job uses Docker Buildx, the existing backend `runtime` target, and the automatic `GITHUB_TOKEN`. Pull requests never receive `packages: write` or deployment secrets.
+- Images are published as `ghcr.io/rafikk98/campushub-api:<full-commit-sha>` and `ghcr.io/rafikk98/campushub-api:latest`. The commit-SHA tag is the immutable identifier; `latest` is a convenience tag.
+- No frontend image is published. Render, Vercel, production migrations, and hosted deployment belong to Milestone 10.
+
 ## Scripts
 
 | Command | Purpose |
@@ -209,4 +225,4 @@ The API logs structured JSON for startup, shutdown, completed requests, readines
 
 ## Known limitations
 
-This is a portfolio project running on free-tier infrastructure later in the project. It is not intended for real institutional use. Public self-registration is limited to student accounts and includes rate limiting but no email verification, password reset, or OAuth. Administrators remain the only way to create instructor or additional administrator accounts. The Docker Compose stack is a local-development setup: it publishes only Nginx on port 8080, uses plain HTTP, and does not yet include production TLS, a managed database, or CI/CD deployment.
+This is a portfolio project running on free-tier infrastructure later in the project. It is not intended for real institutional use. Public self-registration is limited to student accounts and includes rate limiting but no email verification, password reset, or OAuth. Administrators remain the only way to create instructor or additional administrator accounts. The Docker Compose stack is a local-development setup: it publishes only Nginx on port 8080 and uses plain HTTP. CI and backend image publishing are handled by GitHub Actions. Production TLS, a managed database, and hosted deployment remain for Milestone 10; the GHCR package becomes available only after a successful push to `main`.
