@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from 'express';
-import helmet from 'helmet';
+import { default as helmet } from 'helmet';
 import { env } from './config/env.js';
 import { prisma } from './lib/prisma.js';
 import { logger } from './lib/logger.js';
@@ -102,3 +102,5 @@ app.use('/api/v1/student/overview', studentDashboardRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+export default app;

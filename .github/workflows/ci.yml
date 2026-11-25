@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   quality:
     name: Quality gate
@@ -123,3 +127,184 @@ jobs:
             ${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha,scope=campushub-api
           cache-to: type=gha,mode=max,scope=campushub-api
+
+  migrate-production:
+    name: Apply production migrations
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    timeout-minutes: 15
+    env:
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: Install backend dependencies
+        run: pnpm --dir backend install --frozen-lockfile
+
+      - name: Apply committed production migrations
+        run: pnpm --dir backend db:migrate:deploy
+
+  deploy-backend:
+    name: Deploy backend to Vercel
+    runs-on: ubuntu-latest
+    needs:
+      - migrate-production
+      - publish-api
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    timeout-minutes: 20
+    outputs:
+      deployment_url: ${{ steps.deploy.outputs.url }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_API_PROJECT_ID }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: Install backend dependencies
+        run: pnpm --dir backend install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@66.6.0
+
+      - name: Link backend Vercel project
+        run: vercel link --yes --scope "$VERCEL_ORG_ID" --project "$VERCEL_PROJECT_ID"
+
+      - name: Pull backend production settings
+        run: vercel pull --yes --environment=production
+
+      - name: Build backend for Vercel
+        run: vercel build --prod --yes
+
+      - name: Deploy backend
+        id: deploy
+        run: |
+          deployment_url="$(vercel deploy --prebuilt --prod --yes | tail -n 1)"
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+
+  deploy-frontend:
+    name: Deploy frontend to Vercel
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    timeout-minutes: 20
+    outputs:
+      deployment_url: ${{ steps.deploy.outputs.url }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_WEB_PROJECT_ID }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@66.6.0
+
+      - name: Link frontend Vercel project
+        run: vercel link --yes --scope "$VERCEL_ORG_ID" --project "$VERCEL_PROJECT_ID"
+
+      - name: Pull frontend production settings
+        run: vercel pull --yes --environment=production
+
+      - name: Build frontend for Vercel
+        run: vercel build --prod --yes
+
+      - name: Deploy frontend
+        id: deploy
+        run: |
+          deployment_url="$(vercel deploy --prebuilt --prod --yes | tail -n 1)"
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+
+  smoke-production:
+    name: Smoke-test production
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-backend
+      - deploy-frontend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 10
+    steps:
+      - name: Check API health through Vercel
+        env:
+          BACKEND_URL: ${{ needs.deploy-backend.outputs.deployment_url }}
+          FRONTEND_URL: ${{ needs.deploy-frontend.outputs.deployment_url }}
+        run: |
+          set -euo pipefail
+          for url in "$BACKEND_URL/api/health" "$FRONTEND_URL/api/health"; do
+            for attempt in {1..12}; do
+              body="$(curl --silent --show-error --fail "$url" || true)"
+              if printf '%s' "$body" | grep -q '"status":"ok"'; then
+                echo "Healthy: $url"
+                break
+              fi
+              if [ "$attempt" -eq 12 ]; then
+                echo "Health check failed: $url" >&2
+                exit 1
+              fi
+              sleep 5
+            done
+          done
+
+      - name: Check database readiness through Vercel
+        env:
+          FRONTEND_URL: ${{ needs.deploy-frontend.outputs.deployment_url }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..6}; do
+            body="$(curl --silent --show-error --fail "$FRONTEND_URL/api/ready" || true)"
+            if printf '%s' "$body" | grep -q '"status":"ready"'; then
+              echo "Database ready through $FRONTEND_URL"
+              exit 0
+            fi
+            if [ "$attempt" -eq 6 ]; then
+              echo "Readiness check failed" >&2
+              exit 1
+            fi
+            sleep 5
+          done

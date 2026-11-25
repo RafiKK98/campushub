@@ -261,7 +261,7 @@ describe('Origin guard', () => {
 
 describe('Rate limiting', () => {
   it('should return 429 after exceeding login attempts and ignore spoofed forwarded prefixes', async () => {
-    // Simulate: browser -> Vercel -> Render -> Express.
+    // Simulate: browser -> Vercel edge -> backend proxy -> Express.
     // The rightmost forwarded address is the trusted proxy hop, so the
     // address in the middle is the client. The leftmost value is attacker-controlled.
     const testApp = express();
