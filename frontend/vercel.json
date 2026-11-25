@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://campushub-api.vercel.app/api/:path*"
+      "destination": "https://campushub-api-0878.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",

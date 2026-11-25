@@ -12,7 +12,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link as RouterLink, Navigate, useLocation } from 'react-router-dom';
+import { Navigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiError } from '../../lib/api-client';
 import { isPathAllowedForRole, roleHome } from '../../lib/roles';
@@ -122,10 +122,10 @@ export const LoginPage = () => {
             </Link>
           </Typography>
 
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+          {/* <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
             Demo accounts use @campushub.local email addresses and the password configured by your
             administrator.
-          </Typography>
+          </Typography> */}
         </CardContent>
       </Card>
     </Box>
