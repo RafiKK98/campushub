@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from 'express';
-// import helmet from 'helmet';
+import helmet from 'helmet';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
@@ -39,7 +39,7 @@ if (env.TRUST_PROXY) {
   app.set('trust proxy', env.TRUST_PROXY);
 }
 
-// app.use(helmet());
+app.use(helmet());
 app.use(requestLogger);
 app.use(express.json({ limit: '16kb' }));
 app.use(originGuard);
