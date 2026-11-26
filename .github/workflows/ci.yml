@@ -211,6 +211,29 @@ jobs:
           deployment_url="$(vercel deploy --prebuilt --prod --yes | tail -n 1)"
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
 
+  # Fallback only: the Render image-backed service is retained but not part of the
+  # active release chain. Set this job's condition when switching back to Render.
+  deploy-backend-render:
+    name: Deploy backend to Render (fallback, disabled)
+    runs-on: ubuntu-latest
+    needs:
+      - migrate-production
+      - publish-api
+    if: false
+    environment: production
+    timeout-minutes: 15
+    env:
+      DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      IMAGE_URL: ghcr.io/rafikk98/campushub-api:${{ github.sha }}
+    steps:
+      - name: Trigger Render deploy hook with SHA-tagged image URL
+        run: |
+          set -euo pipefail
+          encoded_img_url="$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$IMAGE_URL")"
+          deploy_url="${DEPLOY_HOOK_URL}&imgURL=${encoded_img_url}"
+          response="$(curl --silent --show-error --fail --location "$deploy_url")"
+          echo "Render deploy response: $response"
+
   deploy-frontend:
     name: Deploy frontend to Vercel
     runs-on: ubuntu-latest
@@ -270,20 +293,20 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     timeout-minutes: 10
     steps:
-      - name: Check API health through Vercel
+      - name: Check API health direct and through Vercel
         env:
           BACKEND_URL: ${{ needs.deploy-backend.outputs.deployment_url }}
           FRONTEND_URL: ${{ needs.deploy-frontend.outputs.deployment_url }}
         run: |
           set -euo pipefail
           for url in "$BACKEND_URL/api/health" "$FRONTEND_URL/api/health"; do
-            for attempt in {1..12}; do
+            for attempt in {1..24}; do
               body="$(curl --silent --show-error --fail "$url" || true)"
               if printf '%s' "$body" | grep -q '"status":"ok"'; then
                 echo "Healthy: $url"
                 break
               fi
-              if [ "$attempt" -eq 12 ]; then
+              if [ "$attempt" -eq 24 ]; then
                 echo "Health check failed: $url" >&2
                 exit 1
               fi
@@ -291,20 +314,23 @@ jobs:
             done
           done
 
-      - name: Check database readiness through Vercel
+      - name: Check database readiness direct and through Vercel
         env:
+          BACKEND_URL: ${{ needs.deploy-backend.outputs.deployment_url }}
           FRONTEND_URL: ${{ needs.deploy-frontend.outputs.deployment_url }}
         run: |
           set -euo pipefail
-          for attempt in {1..6}; do
-            body="$(curl --silent --show-error --fail "$FRONTEND_URL/api/ready" || true)"
-            if printf '%s' "$body" | grep -q '"status":"ready"'; then
-              echo "Database ready through $FRONTEND_URL"
-              exit 0
-            fi
-            if [ "$attempt" -eq 6 ]; then
-              echo "Readiness check failed" >&2
-              exit 1
-            fi
-            sleep 5
+          for url in "$BACKEND_URL/api/ready" "$FRONTEND_URL/api/ready"; do
+            for attempt in {1..24}; do
+              body="$(curl --silent --show-error --fail "$url" || true)"
+              if printf '%s' "$body" | grep -q '"status":"ready"'; then
+                echo "Database ready: $url"
+                break
+              fi
+              if [ "$attempt" -eq 24 ]; then
+                echo "Readiness check failed: $url" >&2
+                exit 1
+              fi
+              sleep 5
+            done
           done

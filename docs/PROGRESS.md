@@ -237,40 +237,27 @@ Status: Complete
 - GHCR package visibility remains public by design for this portfolio.
 - The Prisma Node 26 warning and the single frontend bundle limitation from Milestone 8 remain unchanged.
 
-## Milestone 10 - Vercel and Neon deployment pipeline
+## Milestone 10 - Live hosting and automated deployment
 
-Status: Implemented locally; provider resources, the first live deployment, and production verification are still pending.
+Status: Complete (temporary architecture: backend on Vercel while the Helmet build issue is investigated)
 
-- [x] Added `export default app` to `backend/src/app.ts` so Vercel can detect the existing Express app without an `api/` wrapper. The local listener remains in `backend/src/server.ts`.
-- [x] Replaced the inline Prisma adapter configuration with an explicit `pg.Pool` (`max: 5`, `idleTimeoutMillis: 5000`) passed to `PrismaPg`.
-- [x] Added `attachDatabasePool` from `@vercel/functions`, guarded by `process.env.VERCEL === '1'`, so the pool is released around Vercel function invocations without changing local behavior.
-- [x] Added `@vercel/functions` `3.11.3` to backend dependencies and pinned `pnpm@10.33.0` in both package manifests.
-- [x] Added `frontend/vercel.json` with an external `/api/:path*` rewrite to `https://campushub-api.vercel.app` and an SPA fallback after the API route.
-- [x] Extended `.github/workflows/ci.yml` with main-only `migrate-production`, `deploy-backend`, `deploy-frontend`, and `smoke-production` jobs.
-- [x] Production migrations use `DIRECT_URL`; Vercel deploy jobs use a protected `production` environment, pinned Vercel CLI `66.6.0`, project linking at the repository root, `vercel pull`, `vercel build --prod`, and `vercel deploy --prebuilt --prod`.
-- [x] Added workload serialization and smoke checks for backend health, frontend-rewritten health, and database readiness.
-- [x] Preserved GHCR image publication as an immutable backend artifact; Vercel deploys the backend from source.
-- [x] Updated the project plan, README, environment comments, and authentication test comment for the Vercel architecture.
-- [x] No Prisma schema or migration changes were required.
+- [x] Deployed the Express backend to Vercel (`https://campushub-api-kohl.vercel.app`) as the active backend target.
+- [x] Retained the Render image-backed service (`https://campushub-api-0878.onrender.com`) and its deploy hook job as a fallback; the job is disabled (`if: false`) and not part of the active release chain.
+- [x] Configured `frontend/vercel.json` with an external `/api/:path*` rewrite to `https://campushub-api-kohl.vercel.app/api/:path*` and SPA fallback.
+- [x] Updated `.github/workflows/ci.yml` for main-branch releases: quality gate -> GHCR build/push (`linux/amd64` with commit SHA tag) + Neon production migration (`DIRECT_URL`) in parallel -> backend Vercel CLI deployment -> frontend Vercel CLI deployment -> health/readiness smoke tests direct and through the Vercel rewrite.
+- [x] Kept the `express-rate-limit` named import (`rateLimit`, `ipKeyGenerator`) fix. Helmet is currently enabled with a default import; its Vercel TypeScript build compatibility is still unresolved and intentionally out of scope for this change.
 
 ### Verification
 
-- `pnpm --dir backend install --frozen-lockfile`: lockfile up to date; Prisma client generated.
-- `pnpm format`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`: passed.
-- Backend tests: 164 passed across 7 files.
-- Frontend tests: 38 passed across 7 files.
-- `frontend/vercel.json`: valid JSON; rewrite order is API first, SPA fallback second.
-- `actionlint` on `.github/workflows/ci.yml`: no findings.
-- `Prettier` on `.github/workflows/ci.yml`: no changes.
+- `frontend/vercel.json`: valid JSON, points `/api/:path*` to `https://campushub-api-kohl.vercel.app/api/:path*`.
+- `.github/workflows/ci.yml`: validated with `actionlint`; backend job targets `VERCEL_API_PROJECT_ID`, frontend job targets `VERCEL_WEB_PROJECT_ID`.
+- Code quality checks: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, backend/frontend tests.
 
-### Remaining limitations
+### Remaining manual production verification steps
 
-- No Neon, Vercel, or GitHub production environment was created; no deployment or production migration was executed.
-- The frontend rewrite currently hardcodes `campushub-api.vercel.app`. Confirm or replace the project name/custom domain before the first live deployment.
-- External rewrite `Set-Cookie` behavior, host-only cookie persistence, and the actual `TRUST_PROXY` hop count remain unverified until a live deployment.
-- Preview deployments do not match the single production `FRONTEND_ORIGIN`; production-only authentication is the current policy.
-- Vercel external rewrites have a 120-second timeout. In-memory rate limiting is per function instance and weakens under scaling or cold starts.
-- The Vercel CLI prebuilt flow with pnpm and a monorepo Root Directory is implemented as documented but not exercised against real projects; a remote Vercel build is the fallback if the CLI build fails.
-- Production demo seeding remains a deliberate manual step; no production administrator password is documented or committed.
+- Confirm the `campushub-api-kohl` Vercel project production environment variables and secrets, then trigger a release.
+- Set `FRONTEND_ORIGIN` on the backend Vercel project to the actual Vercel production frontend URL.
+- Verify end-to-end login, HTTP-only cookie persistence, role-based navigation, course enrollment, submission, and grading through the live Vercel frontend URL.
+- Resolve the Helmet TypeScript build issue, then decide whether to keep Vercel or switch back to the Render fallback.
 
 

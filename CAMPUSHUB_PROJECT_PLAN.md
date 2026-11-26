@@ -125,8 +125,9 @@ The README should eventually show the live demo URL, repository URL, CI status, 
 - PostgreSQL named volume for persistent data.
 - Docker health checks and service-to-service networking.
 - GitHub Actions for linting, type-checking, testing, migrations, builds, image publishing, and deployment.
-- GitHub Container Registry (GHCR) for publishing the versioned backend Docker image as a build artifact and rollback option.
-- Vercel for the React/Vite static frontend, the Express backend, and the same-origin `/api` rewrite.
+- GitHub Container Registry (GHCR) for publishing the versioned backend Docker image.
+- Vercel for the React/Vite static frontend and its global CDN.
+- Render for running the backend Docker image as an HTTPS web service.
 - Neon for managed production PostgreSQL.
 
 ### Version policy
@@ -166,23 +167,23 @@ Use a simple split deployment that still keeps browser authentication same-origi
 ```mermaid
 flowchart TD
     Browser[Browser]
-    VercelWeb[Vercel: React static site + /api rewrite]
-    VercelApi[Vercel: Express API]
+    Vercel[Vercel: React static site + /api reverse proxy]
+    Render[Render: Express API Docker image from GHCR]
     Neon[(Neon: managed PostgreSQL)]
 
-    Browser -->|HTTPS, same-origin /api requests| VercelWeb
-    VercelWeb -->|External rewrite / reverse proxy| VercelApi
-    VercelApi -->|TLS PostgreSQL connection| Neon
+    Browser -->|HTTPS, same-origin /api requests| Vercel
+    Vercel -->|External rewrite / reverse proxy| Render
+    Render -->|TLS PostgreSQL connection| Neon
 ```
 
-- **Frontend:** Vercel Hobby for the personal portfolio frontend. Vercel serves the built Vite app over HTTPS and uses an external rewrite to proxy `/api/*` to the backend Vercel project. The browser continues to call a relative URL such as `/api/courses`; it does not call the backend hostname directly.
-- **Backend:** A second Vercel project built from the same repository with `backend` as the Root Directory. Vercel detects the Express app from `backend/src/app.ts` and runs it as a Node function. GitHub Actions deploys the backend source after the quality gate, GHCR publication, and production migration succeed. The GHCR image remains a versioned build artifact and rollback option; it is not the Vercel deployment source.
-- **Database:** Neon managed PostgreSQL. Use the pooled connection string for application runtime and a direct connection string for Prisma CLI migrations. Attach the explicit `pg.Pool` to Vercel’s request lifecycle with `attachDatabasePool`. Keep the Docker Compose PostgreSQL service for local development; the hosted app uses Neon, not a public port on a local database container.
-- **Authentication:** Keep the JWT in an HTTP-only, Secure, host-only cookie. Do not set the cookie `Domain` to the backend hostname. Because the browser calls `/api` on the frontend Vercel origin and Vercel proxies that request to the backend project, the browser sees one origin and avoids relying on cross-site cookies. Verify the actual `Set-Cookie` behavior in a deployed browser before calling hosting complete.
-- **Vercel rewrite:** Put `frontend/vercel.json` in the frontend project root and add an external rewrite from `/api/:path*` to the backend project’s stable production domain. Keep the browser’s API client configured to use relative `/api` paths. Vercel documents external rewrites as reverse-proxy behavior and limits proxied requests to 120 seconds.
-- **Backend runtime:** Export the Express app as the module default so Vercel can detect it. The local `src/server.ts` listener remains for Docker Compose and local development. Configure a health endpoint such as `/api/health`. Set `TRUST_PROXY=1` initially and verify the real hop count and rate-limit keying behind the frontend-to-backend rewrite; Vercel overwrites `X-Forwarded-For` rather than preserving arbitrary client values.
+- **Frontend:** Vercel Hobby for the personal portfolio frontend. Vercel serves the built Vite app over HTTPS and uses an external rewrite to proxy `/api/*` to the Render API at `https://campushub-api-0878.onrender.com`. The browser continues to call a relative URL such as `/api/courses`; it does not call the Render hostname directly.
+- **Backend:** Render web service running the production backend Docker image published to GHCR by GitHub Actions (`ghcr.io/rafikk98/campushub-api:<sha>`).
+- **Database:** Neon managed PostgreSQL. Use the pooled connection string for application runtime and a direct connection string for Prisma CLI migrations. Keep the Docker Compose PostgreSQL service for local development; the hosted app uses Neon, not a public port on a local database container.
+- **Authentication:** Keep the JWT in an HTTP-only, Secure, host-only cookie. Do not set the cookie `Domain` to the Render hostname. Because the browser calls `/api` on the Vercel origin and Vercel proxies that request to Render, the browser sees one origin and avoids relying on cross-site cookies. Verify the actual `Set-Cookie` behavior in a deployed browser before calling hosting complete.
+- **Vercel rewrite:** Put `frontend/vercel.json` in the frontend project root and add an external rewrite from `/api/:path*` to `https://campushub-api-0878.onrender.com/api/:path*`. Keep the browser’s API client configured to use relative `/api` paths.
+- **Backend runtime:** Listen on `0.0.0.0` and use `process.env.PORT` with a safe fallback. Configure health endpoint `/api/health`. Set `TRUST_PROXY=1` for Render's reverse proxy.
 
-The Vercel/Neon free tiers are suitable for a portfolio demo, not a production university system. Vercel Hobby is free for personal projects, but function instances are ephemeral and can cold-start; external rewrites time out after 120 seconds. Neon Free currently includes 100 compute-unit hours and 1 GB storage per project, and its compute scales to zero after inactivity. Recheck provider limits and terms immediately before deployment; they can change. [Neon free plan limits](https://neon.com/docs/introduction/plans) · [Vercel Hobby](https://vercel.com/pricing) · [Vercel Express](https://vercel.com/docs/frameworks/backend/express) · [Vercel external rewrites](https://vercel.com/docs/routing/rewrites).
+The Vercel/Render/Neon free tiers are suitable for a portfolio demo, not a production university system. Free Render web services spin down after 15 minutes without traffic and can take about a minute to wake (expect a cold start during an interview/demo after a long idle period). Neon Free currently includes 100 compute-unit hours and 1 GB storage per project, and its compute scales to zero after inactivity. Recheck provider limits and terms immediately before deployment; they can change. [Render free limits](https://render.com/docs/free) · [Neon free plan limits](https://neon.com/docs/introduction/plans) · [Vercel Hobby](https://vercel.com/pricing) · [Vercel external rewrites](https://vercel.com/docs/routing/rewrites).
 
 ### Suggested repository layout
 
@@ -706,33 +707,37 @@ Jobs/steps should:
 
 The workflow must fail when any required check fails. Do not make a red test pass by skipping it, marking it optional, or swallowing its exit code.
 
+### Temporary backend deployment deviation (current)
+
+> **Status note:** The backend is temporarily deployed to Vercel (`https://campushub-api-kohl.vercel.app`) while an unresolved Helmet TypeScript build compatibility issue is investigated. The Render image-backed service (`https://campushub-api-0878.onrender.com`) remains configured as a fallback and is not the active target. The frontend `/api` rewrite and the backend GitHub Actions job currently point to the Vercel backend. The Render architecture described in this section is the planned target and is intentionally retained; this deviation is temporary and does not change the long-term plan.
+
 ### Release/deployment jobs — main branch only
 
 Run only on a push to `main`, and only after the quality job succeeds. Keep pull requests limited to tests and build checks; never expose production secrets to untrusted PR code.
 
-1. **Build and publish API image:** use Docker Buildx, build the backend Dockerfile for `linux/amd64`, authenticate to GHCR with the workflow's `GITHUB_TOKEN`, and publish `ghcr.io/<owner>/<repo>/campushub-api:<commit-sha>`. Use least-privilege workflow permissions (`contents: read`, `packages: write`). A moving `latest` tag may be added for convenience. The immutable commit-SHA tag is a versioned artifact and rollback reference; Vercel deploys the backend from source.
-2. **Run production database migrations:** use the production Neon direct connection string as a GitHub Actions secret and run `prisma migrate deploy` with the Prisma 7-compatible config. Do this only after CI passes and before deploying the new API version. Do not run `migrate dev` against production. Keep migrations backwards-compatible with the currently deployed API where practical.
-3. **Deploy the backend to Vercel:** use Vercel CLI from GitHub Actions after tests, GHCR publication, and migrations pass. Store `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and the backend project ID as GitHub repository secrets. Link the repository root to the backend project, pull production project settings, run `vercel build --prod`, and deploy the prebuilt output with `vercel deploy --prebuilt --prod`. Disable Vercel Git production auto-deploys so a push cannot deploy ahead of the migration job.
-4. **Deploy the frontend to Vercel:** use Vercel CLI again with the frontend project ID after the backend production deployment succeeds. The frontend `vercel.json` must already point `/api/*` at the backend project’s stable production domain. Pull, build, and deploy the prebuilt frontend output the same way.
-5. **Smoke-test production:** request the backend and frontend deployment URLs for `/api/health`, and `/api/ready` through the frontend rewrite. Then manually verify login, cookie persistence after refresh, role restrictions, and one complete student/instructor workflow. Add an automated smoke test only if it can be reliable and does not mutate production data unpredictably.
+1. **Build and publish API image:** use Docker Buildx, build the backend Dockerfile for `linux/amd64`, authenticate to GHCR with the workflow's `GITHUB_TOKEN`, and publish `ghcr.io/<owner>/<repo>/campushub-api:<commit-sha>`. Use least-privilege workflow permissions (`contents: read`, `packages: write`). A moving `latest` tag may be added for convenience.
+2. **Run production database migrations:** use the production Neon direct connection string as a GitHub Actions secret and run `prisma migrate deploy` with the Prisma 7-compatible config (`prisma7.config.ts`). Do this only after CI passes and before deploying the new API version. Do not run `migrate dev` against production. Keep migrations backwards-compatible with the currently deployed API where practical.
+3. **Deploy the API to Render:** make the GHCR package public for image pulls, create a Render image-backed Web Service for the API image (`https://campushub-api-0878.onrender.com`), and save the Render deploy hook URL in `RENDER_DEPLOY_HOOK_URL`. The release job triggers the hook with `imgURL` containing the URL-encoded exact SHA-tagged image URL (`ghcr.io/rafikk98/campushub-api:<commit-sha>`) so Render deploys the image just published.
+4. **Deploy the frontend to Vercel:** use Vercel CLI with the frontend project ID after the backend deployment succeeds. The frontend `vercel.json` points `/api/*` at `https://campushub-api-0878.onrender.com/api/:path*`.
+5. **Smoke-test production:** request `/api/health` directly on Render and through the Vercel origin. Then manually verify login, cookie persistence after refresh, role restrictions, and one complete student/instructor workflow.
 
 Do not publish a frontend Docker image for the hosted deployment: Vercel serves the static Vite build. The frontend Dockerfile and Nginx image remain useful for the local Docker Compose stack.
 
 ### Production secrets and variables
 
-Store runtime secrets in the Vercel project settings and deployment credentials in GitHub Actions secrets. Never commit them.
+Store secrets in the Render dashboard, Vercel dashboard, or GitHub Actions secrets as appropriate. Never commit them.
 
 | Name | Where | Purpose |
 |---|---|---|
-| `DATABASE_URL` | Vercel backend runtime | Neon pooled PostgreSQL URL used by the Prisma runtime adapter |
+| `DATABASE_URL` | Render runtime | Neon pooled PostgreSQL URL used by the Prisma runtime adapter |
 | `DIRECT_URL` | GitHub Actions migration job | Neon direct/unpooled URL used by Prisma 7 CLI migrations |
-| `JWT_SECRET` | Vercel backend runtime | Long random signing secret; never expose to frontend |
-| `NODE_ENV` | Vercel backend runtime | `production` |
-| `FRONTEND_ORIGIN` | Vercel backend runtime | Exact production frontend origin; do not use `*` with credentials |
-| `TRUST_PROXY` | Vercel backend runtime | Start with `1`; verify the real hop count after the first deployment |
+| `JWT_SECRET` | Render runtime | Long random signing secret; never expose to frontend |
+| `NODE_ENV` | Render runtime | `production` |
+| `FRONTEND_ORIGIN` | Render runtime | Exact production Vercel origin; do not use `*` with credentials |
+| `TRUST_PROXY` | Render runtime | Set to `1` for Render's reverse proxy |
+| `RENDER_DEPLOY_HOOK_URL` | GitHub Actions | Secret deploy hook for the Render image-backed service |
 | `VERCEL_TOKEN` | GitHub Actions | Vercel deployment credential |
 | `VERCEL_ORG_ID` | GitHub Actions | Vercel organization/team ID |
-| `VERCEL_API_PROJECT_ID` | GitHub Actions | Backend Vercel project ID |
 | `VERCEL_WEB_PROJECT_ID` | GitHub Actions | Frontend Vercel project ID |
 
 For Prisma 7, runtime connectivity and CLI migration connectivity are distinct concerns. Use the pooled Neon connection with the Node PostgreSQL driver adapter at runtime; configure `prisma7.config.ts` to read `DIRECT_URL` for CLI migration commands. Use an explicit `pg.Pool` with a short idle timeout and attach it to Vercel’s request lifecycle with `attachDatabasePool` from `@vercel/functions`. Do not assume Prisma 6 `directUrl` schema examples apply to Prisma 7. Follow the installed Prisma 7 release's official connection-pooling and config documentation.
@@ -751,23 +756,22 @@ This is the intended portfolio deployment. Open the provider accounts only when 
 |---|---|---|---|
 | Source control | GitHub | Public repository | Recruiters can inspect code, commits, issues, and CI results |
 | Frontend | Vercel | Hobby | HTTPS, CDN, simple React/Vite static hosting, and external API rewrites |
-| Backend | Vercel | Hobby | Runs the existing Express API as a Node function from the same repository |
+| Backend | Render | Free Docker Web Service | Runs the backend Docker image built by GitHub Actions and published to GHCR (`https://campushub-api-0878.onrender.com`) |
 | Database | Neon | Free PostgreSQL project | Persistent managed Postgres without operating a public database container |
-| Container registry | GHCR | Public package | Versioned backend image artifact and rollback reference; not the Vercel deployment source |
+| Container registry | GHCR | Public package | Render pulls the versioned backend image without private registry credentials |
 
-This target is appropriate for a personal portfolio demo, not a production institution. Vercel Hobby is intended for personal projects. Functions are ephemeral and may cold-start, and external rewrites time out after 120 seconds. Neon Free currently has 100 CU-hours and 1 GB storage per project, with compute scaling to zero after inactivity. Recheck pricing/limits when setting up accounts; do not upgrade or enable paid usage without reviewing the cost.
+This target is appropriate for a personal portfolio demo, not a production institution. Vercel Hobby is intended for personal projects. Render's free web services spin down after 15 minutes idle and take about a minute to wake; expect a cold start during an interview/demo after a long idle period. Neon Free currently has 100 CU-hours and 1 GB storage per project, with compute scaling to zero after inactivity. Recheck pricing/limits when setting up accounts; do not upgrade or enable paid usage without reviewing the cost.
 
 ### Deployment setup sequence
 
 1. **Push the local project to GitHub** using the repository workflow in section 2. Keep the repository public and make sure no `.env` files, passwords, private keys, or real personal/student data are present.
-2. **Create the Neon production project.** Choose a region aligned with the Vercel function region where possible. Create separate pooled and direct connection strings. Keep the database empty until migrations run; do not use a local database dump with real user data.
-3. **Create the backend Vercel project.** Import the same GitHub repository, set the Root Directory to `backend`, and let Vercel detect the Express app from `backend/src/app.ts`. Disable Git production auto-deploys. Add the Neon pooled `DATABASE_URL`, a strong random `JWT_SECRET`, `NODE_ENV=production`, the exact frontend origin as `FRONTEND_ORIGIN`, and `TRUST_PROXY=1`. Do not add `DIRECT_URL` to runtime.
-4. **Create the frontend Vercel project.** Import the same repository with Root Directory `frontend`, disable Git production auto-deploys, and confirm the project’s stable production domain. Update `frontend/vercel.json` so `/api/:path*` targets the backend project’s stable production domain. The SPA fallback must remain after the API rewrite. Do not enable Deployment Protection on the production deployments used by the smoke job.
-5. **Create the Vercel token and record IDs.** Save the Vercel organization ID, backend project ID, and frontend project ID, and create a deployment token. Add them as GitHub Actions secrets named `VERCEL_ORG_ID`, `VERCEL_API_PROJECT_ID`, `VERCEL_WEB_PROJECT_ID`, and `VERCEL_TOKEN`.
-6. **Set GitHub production secrets.** Add `DIRECT_URL` and the Vercel values to a protected `production` environment or repository secrets. Production credentials must be restricted to the deployment jobs and must not be available to pull-request workflows.
-7. **Run the first production release.** Merge a tested change to `main`. GitHub Actions runs the quality gate, publishes the backend image to GHCR and applies production migrations in parallel, deploys the backend to Vercel, deploys the frontend to Vercel, and runs the health/readiness smoke test.
-8. **Verify the live app.** Confirm frontend and API health, sign in with each demo role, refresh the page to verify the cookie persists, test role boundaries, enroll in a course, submit an assignment, and grade it. Verify no API request from the browser bypasses the `/api` Vercel rewrite.
-9. **Add live URLs to the README and GitHub repository description.** Include the deployed app, source repository, screenshots, a concise architecture diagram, demo instructions, and known free-tier limitations.
+2. **Create the Neon production project.** Choose a region near the Render service region where possible. Create separate pooled and direct connection strings. Keep the database empty until migrations run; do not use a local database dump with real user data.
+3. **Prepare Render.** Create an image-backed Web Service using the first API image published to GHCR. Set the service's health-check path to `/api/health`, configure required runtime environment variables (`DATABASE_URL`, `JWT_SECRET`, `NODE_ENV=production`, `FRONTEND_ORIGIN`, `TRUST_PROXY=1`), and set port/startup behavior to match the API. Copy the deploy hook URL into GitHub's `RENDER_DEPLOY_HOOK_URL` secret.
+4. **Prepare Vercel.** Import the same GitHub repository with Root Directory `frontend`. Set up `frontend/vercel.json` with the external `/api/*` rewrite to `https://campushub-api-0878.onrender.com/api/:path*`. Save organization and frontend project IDs and create a Vercel token; add them as GitHub Actions secrets (`VERCEL_ORG_ID`, `VERCEL_WEB_PROJECT_ID`, `VERCEL_TOKEN`).
+5. **Set GitHub repository secrets.** Add `DIRECT_URL`, `RENDER_DEPLOY_HOOK_URL`, `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_WEB_PROJECT_ID`. Production credentials must be restricted to deployment jobs and must not be available to pull-request workflows.
+6. **Run the production release.** Merge a tested change to `main`. GitHub Actions runs the quality gate, publishes the backend image to GHCR, applies production migrations, triggers Render to deploy the exact SHA-tagged image via deploy hook `imgURL`, and deploys the frontend to Vercel.
+7. **Verify the live app.** Confirm frontend and API health (`/api/health`), sign in with each demo role, refresh the page to verify cookie persistence, test role boundaries, enroll in a course, submit an assignment, and grade it.
+8. **Add live URLs to the README and GitHub repository description.** Include the deployed app, source repository, screenshots, a concise architecture diagram, demo instructions, and known free-tier cold-start behavior.
 
 ### Vercel API rewrite
 
@@ -779,7 +783,7 @@ The frontend project uses `frontend/vercel.json`. The essential routes are:
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://campushub-api.vercel.app/api/:path*"
+      "destination": "https://campushub-api-0878.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
@@ -789,7 +793,7 @@ The frontend project uses `frontend/vercel.json`. The essential routes are:
 }
 ```
 
-This proxies browser requests while keeping the URL on the frontend Vercel origin. Keep API calls relative (`/api/...`) in the React app. Replace the backend hostname if the Vercel project or custom domain differs. Filesystem routes serve built assets before the SPA fallback. Do not commit credentials in `vercel.json`.
+This proxies browser requests while keeping the URL on the frontend Vercel origin. Keep API calls relative (`/api/...`) in the React app. Do not commit credentials in `vercel.json`.
 
 ### Database migration and demo-data policy
 
@@ -798,18 +802,18 @@ This proxies browser requests while keeping the URL on the frontend Vercel origi
 - The production migration job uses the direct Neon connection URL and the matching Prisma 7 `prisma7.config.ts` configuration.
 - Use synthetic demo users and data only. Never enter actual student names, grades, contact information, or institutional records.
 - Do not publish a production administrator password in the README. Create or rotate the demo admin credentials privately, or provide a restricted seeded demo role for public visitors.
-- Don't write uploaded files or app data to a Vercel function's local filesystem; function instances are ephemeral. File uploads are excluded from this MVP anyway.
+- Don't write uploaded files or app data to a Render container's local filesystem; the free web service filesystem is ephemeral. File uploads are excluded from this MVP anyway.
 
 ### Live deployment acceptance checklist
 
 - [ ] Public GitHub repository exists and contains all source code and committed migrations.
 - [ ] No secret, local `.env`, database dump, or real student information is present in Git history.
 - [ ] Vercel serves the React app over HTTPS.
-- [ ] Vercel `/api/*` rewrite reaches the backend Vercel project without changing the browser-visible origin.
-- [ ] The backend Vercel deployment corresponds to the same commit as the published GHCR image.
+- [ ] Vercel `/api/*` rewrite reaches the Render API (`https://campushub-api-0878.onrender.com`) without changing the browser-visible origin.
+- [ ] Render runs the exact SHA-tagged backend Docker image published to GHCR.
 - [ ] Neon PostgreSQL is reachable from the backend, with runtime pooling and direct migration configuration correctly separated.
 - [ ] Production cookies are HTTP-only, Secure, host-only, and survive browser refresh through the proxy.
-- [ ] Production migrations run only after CI succeeds and before the new API version is deployed.
+- [ ] Production migrations run only after CI succeeds and before the new API image is deployed.
 - [ ] GitHub Actions fails on quality errors and does not deploy when checks fail.
 - [ ] README documents live URL, source URL, setup, demo behavior, deployment topology, and free-tier limitations.
 
@@ -926,11 +930,9 @@ Implement in order. Do not start the next milestone until the current milestone'
 ### Milestone 10 — live hosting and automated deployment
 
 - Create the Neon production database and configure pooled runtime plus direct migration connections.
-- Create separate backend and frontend Vercel projects from the same repository with Git production auto-deploys disabled.
-- Adapt the Express entrypoint for Vercel and attach the Prisma PostgreSQL pool to Vercel’s request lifecycle.
-- Add the external `/api/*` rewrite from the frontend project to the backend project’s stable production domain.
-- Add GitHub Actions deployment secrets and jobs for production migrations, backend Vercel deployment, frontend Vercel deployment, and smoke checks.
-- Preserve the GHCR backend image publication as a versioned artifact and rollback reference.
+- Deploy the backend GHCR image to Render (`https://campushub-api-0878.onrender.com`) and configure the health check and runtime secrets.
+- Deploy the frontend to Vercel and add the external `/api/*` reverse-proxy rewrite to Render.
+- Add GitHub Actions deployment secrets and jobs for production migrations, Render deploy hook with `imgURL`, and Vercel CLI frontend deployment.
 - Verify cookie-based authentication through the Vercel proxy and test the main role-based user journeys.
 - Document the live app, free-tier limitations, deployment flow, and rollback approach.
 
@@ -1105,7 +1107,7 @@ Once all acceptance criteria pass, a concise resume entry could be:
 
 **CampusHub — Full-Stack Student Portal**
 
-Built and deployed a role-based student portal using React, TypeScript, Express, PostgreSQL, and Prisma, featuring course management, student enrollment, assignment submissions, grading, and announcements. Containerized the full stack with Docker Compose and implemented GitHub Actions CI/CD for automated testing, database migrations, GHCR image publishing, and deployment to two Vercel projects with a managed Neon PostgreSQL database.
+Built and deployed a role-based student portal using React, TypeScript, Express, PostgreSQL, and Prisma, featuring course management, student enrollment, assignment submissions, grading, and announcements. Containerized the full stack with Docker Compose and implemented GitHub Actions CI/CD for automated testing, database migrations, GHCR image publishing, and deployment to Render/Vercel with a managed Neon PostgreSQL database.
 
 Only use this wording after those features, the live deployment, and the automation are actually implemented and verified. Add the live demo URL, public GitHub repository link, and 2–3 screenshots to the README.
 
@@ -1134,10 +1136,10 @@ Use official documentation as the source of truth when APIs or setup steps diffe
 - GitHub Actions with Vercel: https://vercel.com/kb/guide/how-can-i-use-github-actions-with-vercel
 - Vercel external rewrites: https://vercel.com/docs/routing/rewrites
 - Vercel CLI deployments: https://vercel.com/docs/deployments
-- Vercel Express: https://vercel.com/docs/frameworks/backend/express
-- Vercel functions limits: https://vercel.com/docs/functions/limitations
-- Vercel CLI: https://vercel.com/docs/cli
-- Prisma with Vercel: https://www.prisma.io/docs/orm/prisma-client/deployment/serverless/deploy-to-vercel
+- Render free service limits: https://render.com/docs/free
+- Render Docker image deployment: https://render.com/docs/deploying-an-image
+- Render deploy hooks: https://render.com/docs/deploy-hooks
+- Render environment variables/secrets: https://render.com/docs/configure-environment-variables
 - Neon Free plan limits: https://neon.com/docs/introduction/plans
 - Prisma 7 database connections and pooling: https://www.prisma.io/docs/orm/v7/prisma-client/setup-and-configuration/databases-connections
 - Prisma 7 config reference: https://www.prisma.io/docs/orm/v7/reference/prisma-config-reference

@@ -1,6 +1,8 @@
 # CampusHub
 
-CampusHub is a role-based university student portal built as a full-stack portfolio project. It demonstrates a React + TypeScript frontend, an Express + TypeScript API, PostgreSQL with Prisma, backend-enforced authorization, automated tests, a Docker Compose stack, a GitHub Actions quality gate, GHCR backend image publishing, and automated Vercel/Neon deployment. The Milestone 10 deployment pipeline is implemented locally; the first live production deployment is still pending.
+CampusHub is a role-based university student portal built as a full-stack portfolio project. It demonstrates a React + TypeScript frontend, an Express + TypeScript API, PostgreSQL with Prisma, backend-enforced authorization, automated tests, a Docker Compose stack, a GitHub Actions quality gate, GHCR backend image publishing, and hosted deployment on Vercel with Neon PostgreSQL.
+
+**Live Backend API:** https://campushub-api-kohl.vercel.app (temporary Vercel target; Render `https://campushub-api-0878.onrender.com` retained as fallback)
 
 **Repository:** https://github.com/RafiKK98/campushub
 
@@ -12,7 +14,7 @@ Milestones 1-8 are complete: the full-stack application includes the Prisma 7 sc
 
 Milestone 9 is complete: pull requests and pushes to `main` run the GitHub Actions quality gate, and a successful main-branch run publishes the backend production image to GHCR with immutable commit-SHA and `latest` tags. The workflow has run successfully on GitHub, and the public GHCR package is available.
 
-Milestone 10 adds the hosted deployment implementation: two Vercel projects from the same repository, a Neon production database, a Prisma PostgreSQL pool attached to Vercel’s request lifecycle, a frontend `/api` rewrite, and main-branch GitHub Actions jobs for production migrations, backend deployment, frontend deployment, and health/readiness smoke checks. Provider resources and the first live deployment are not yet configured.
+Milestone 10 adds the hosted deployment implementation: the Express backend is deployed to Vercel (`https://campushub-api-kohl.vercel.app`), the React frontend is deployed to Vercel with an external `/api` rewrite to the backend project, PostgreSQL is hosted on Neon, and GitHub Actions automates production migrations, backend deployment, and frontend Vercel releases. The backend is temporarily hosted on Vercel while the Helmet TypeScript compatibility issue is investigated; the Render service remains configured as a fallback.
 
 A post-M7 extension adds public student self-registration at `/register`. Registration always creates an active `STUDENT`, signs the new account in through the same HTTP-only session cookie used by login, and never accepts a role or active status from the client. Instructor and admin accounts are still created by administrators.
 
@@ -24,7 +26,7 @@ See [CAMPUSHUB_PROJECT_PLAN.md](./CAMPUSHUB_PROJECT_PLAN.md) for the full specif
 - Backend: Node.js 26 LTS, Express 5, TypeScript
 - Database: PostgreSQL with Prisma 7.10.1 and Neon
 - Tooling: pnpm, ESLint, Prettier
-- Delivery: Docker Compose (local); GitHub Actions CI, GHCR backend image publishing, and Vercel/Neon deployment
+- Delivery: Docker Compose (local); GitHub Actions CI, GHCR backend image publishing, Vercel backend and frontend deployment, and Neon PostgreSQL (Render retained as a backend fallback)
 
 ## Repository layout
 
@@ -153,22 +155,18 @@ Compose uses the root `.env` and injects `db:5432` connection URLs into the `mig
 The workflow is defined in `.github/workflows/ci.yml`.
 
 - Pull requests targeting `main` run the quality gate only.
-- Pushes to `main` run the quality gate and then publish the backend image and apply production migrations. Backend and frontend Vercel deployments wait for those jobs to succeed, and a smoke job checks health/readiness through the deployed frontend rewrite.
-- The quality gate installs both packages with frozen lockfiles, checks formatting and linting, type-checks, validates and applies committed Prisma migrations against a PostgreSQL 17 service container, runs backend and frontend tests, and builds both production bundles.
-- The publish job uses Docker Buildx, the existing backend `runtime` target, and the automatic `GITHUB_TOKEN`. Pull requests never receive `packages: write` or deployment secrets.
-- Images are published as `ghcr.io/rafikk98/campushub-api:<full-commit-sha>` and `ghcr.io/rafikk98/campushub-api:latest`. The commit-SHA tag is the immutable artifact; Vercel deploys the backend from source.
-- Production migrations run with `DIRECT_URL` against Neon. Deployment jobs are restricted to the `production` GitHub environment and main-branch pushes.
-- The Vercel CLI is pinned to `66.6.0`. Both deploy jobs link the repository root to their project, pull production settings, build prebuilt output, and deploy it. Vercel Git production auto-deploys should be disabled to avoid racing the migration job.
-- No frontend image is published. Vercel serves the static Vite build.
+- Pushes to `main` run the quality gate and then publish the backend Docker image to GHCR and apply production migrations to Neon.
+- The Vercel CLI builds and deploys the backend prebuilt output, then the frontend prebuilt output.
+- A smoke job checks `/api/health` and `/api/ready` on the deployed backend and through the Vercel frontend origin rewrite.
+- Deployment jobs are restricted to the `production` GitHub environment and main-branch pushes.
+- The Render deploy hook job is retained in the workflow but disabled (`if: false`) as a fallback backend target.
 
-### Intended hosted topology
+### Hosted topology
 
-- Frontend: Vercel project rooted at `frontend`, intended domain `https://campushub-web.vercel.app`.
-- Backend: Vercel project rooted at `backend`, intended domain `https://campushub-api.vercel.app`.
+- Frontend: Vercel project rooted at `frontend` (served over HTTPS with SPA routing).
+- Backend: Vercel project rooted at `backend` (temporary; `https://campushub-api-kohl.vercel.app`).
 - Database: Neon PostgreSQL with pooled `DATABASE_URL` for runtime and direct `DIRECT_URL` for migrations.
-- The frontend `vercel.json` rewrites `/api/:path*` to the backend production domain, followed by the SPA fallback. If either Vercel project uses a different name or custom domain, update the rewrite and `FRONTEND_ORIGIN` together. Use the stable production alias, not a per-deployment URL.
-- Do not enable Vercel Deployment Protection on the production deployments used by the smoke job, or the unauthenticated health checks will fail.
-- No provider resources have been created and no live deployment has been verified yet.
+- The frontend `vercel.json` rewrites `/api/:path*` to `https://campushub-api-kohl.vercel.app/api/:path*`.
 
 Backend Vercel runtime variables:
 
@@ -177,8 +175,8 @@ Backend Vercel runtime variables:
 | `DATABASE_URL` | Neon pooled connection string |
 | `JWT_SECRET` | Random secret of at least 32 characters |
 | `NODE_ENV` | `production` |
-| `FRONTEND_ORIGIN` | Exact frontend production origin, for example `https://campushub-web.vercel.app` |
-| `TRUST_PROXY` | Start with `1`; verify the real proxy hop count and rate-limit keying |
+| `FRONTEND_ORIGIN` | Exact production Vercel frontend origin |
+| `TRUST_PROXY` | Start with `1`; verify the real proxy hop count |
 
 GitHub Actions production secrets:
 
@@ -189,12 +187,13 @@ GitHub Actions production secrets:
 | `VERCEL_ORG_ID` | Vercel organization/team ID |
 | `VERCEL_API_PROJECT_ID` | Backend Vercel project ID |
 | `VERCEL_WEB_PROJECT_ID` | Frontend Vercel project ID |
+| `RENDER_DEPLOY_HOOK_URL` | Render deploy hook URL, used only if the fallback backend is re-enabled |
 
-`DIRECT_URL` is not a Vercel runtime variable. The backend uses an explicit `pg.Pool` and `attachDatabasePool` from `@vercel/functions` so connections are released around function invocations.
+`DIRECT_URL` is not a Vercel runtime variable.
 
-Preview deployments are intentionally out of scope because the API accepts one exact `FRONTEND_ORIGIN`. Disable previews or do not rely on preview authentication. Verify cookie persistence through the external rewrite on the first live deployment; Vercel limits proxied requests to 120 seconds and overwrites `X-Forwarded-For`. In-memory rate limits are per function instance, so they weaken under scaling and cold starts.
+Preview deployments are intentionally out of scope because the API accepts one exact `FRONTEND_ORIGIN`. Disable previews or do not rely on preview authentication. Verify cookie persistence through the external rewrite on the live deployment.
 
-Rollback is independent per Vercel project by promoting a previous production deployment. The immutable GHCR image remains available as a versioned backend artifact. Keep migrations backwards-compatible because a rollback does not undo the Neon migration.
+Rollback is per Vercel project by promoting a previous production deployment. The immutable GHCR image remains available for the Render fallback. Keep migrations backwards-compatible because a rollback does not undo a database migration.
 
 ## Scripts
 
@@ -265,4 +264,4 @@ The API logs structured JSON for startup, shutdown, completed requests, readines
 
 ## Known limitations
 
-This is a portfolio project intended for free-tier infrastructure. It is not intended for real institutional use. Public self-registration is limited to student accounts and includes rate limiting but no email verification, password reset, or OAuth. Administrators remain the only way to create instructor or additional administrator accounts. The Docker Compose stack is a local-development setup: it publishes only Nginx on port 8080 and uses plain HTTP. CI, GHCR publishing, and the Vercel deployment pipeline are implemented in GitHub Actions. The first live deployment, provider-side environment configuration, cookie/rewrite behavior, proxy-hop verification, preview-deployment policy, and production demo seed are still pending. Vercel function instances are ephemeral, external rewrites time out after 120 seconds, and the in-memory rate limiter is not shared across instances.
+This is a portfolio project intended for free-tier infrastructure. It is not intended for real institutional use. Public self-registration is limited to student accounts and includes rate limiting but no email verification, password reset, or OAuth. Administrators remain the only way to create instructor or additional administrator accounts. The Docker Compose stack is a local-development setup: it publishes only Nginx on port 8080 and uses plain HTTP. CI, GHCR publishing, and the Vercel backend/frontend deployment pipeline are implemented in GitHub Actions. The backend is temporarily on Vercel while the Helmet TypeScript build issue is investigated.
